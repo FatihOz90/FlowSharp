@@ -1,10 +1,10 @@
 import { defineConfig } from 'vitepress'
 
 export default defineConfig({
+  base: '/FlowSharp/',
   title: "FlowSharp",
   description: "Enterprise-grade workflow automation platform built with C# / .NET 10 and Blazor",
   themeConfig: {
-    logo: '/logo.png',
     nav: [
       { text: 'Home', link: '/' },
       { text: 'Guide', link: '/guide/getting-started' },

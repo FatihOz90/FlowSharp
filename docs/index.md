@@ -6,8 +6,8 @@ hero:
   text: "Next-Gen Workflow Automation"
   tagline: "Enterprise-grade node-based workflow automation built with .NET 10, Blazor, and Roslyn."
   image:
-    src: /logo.png
-    alt: FlowSharp Logo
+    src: /FlowSharp/assets/flowsharp-hero.png
+    alt: FlowSharp workflow designer hero
   actions:
     - theme: brand
       text: Get Started
