@@ -18,3 +18,8 @@ src/FlowSharp.Worker/App_Data/
 src/FlowSharp.Web/plugins/*/
 !src/FlowSharp.Web/plugins/Sample/
 !src/FlowSharp.Web/plugins/README.md
+
+# Documentation build artifacts/dependencies
+docs/node_modules/
+docs/.vitepress/cache/
+docs/.vitepress/dist/
