@@ -42,9 +42,11 @@
             <MudTooltip Text="@L["nav.executions"]" Placement="Placement.Right">
                 <MudNavLink Href="executions" Icon="@Icons.Material.Filled.History" />
             </MudTooltip>
-            <MudTooltip Text="@L["nav.credentials"]" Placement="Placement.Right">
-                <MudNavLink Href="credentials" Icon="@Icons.Material.Filled.Key" />
-            </MudTooltip>
+            <AuthorizeView Policy="@FlowSharp.Domain.Security.AppPermissions.CredentialsManage">
+                <MudTooltip Text="@L["nav.credentials"]" Placement="Placement.Right">
+                    <MudNavLink Href="credentials" Icon="@Icons.Material.Filled.Key" />
+                </MudTooltip>
+            </AuthorizeView>
             <AuthorizeView Policy="@FlowSharp.Domain.Security.AppPermissions.PluginsManage">
                 <MudTooltip Text="@L["nav.marketplace"]" Placement="Placement.Right">
                     <MudNavLink Href="marketplace" Icon="@Icons.Material.Filled.Extension" />
@@ -56,7 +58,9 @@
             <MudNavLink Href="" Match="NavLinkMatch.All" Icon="@Icons.Material.Filled.Dashboard">@L["nav.home"]</MudNavLink>
             <MudNavLink Href="workflows" Icon="@Icons.Material.Filled.AccountTree">@L["nav.workflows"]</MudNavLink>
             <MudNavLink Href="executions" Icon="@Icons.Material.Filled.History">@L["nav.executions"]</MudNavLink>
-            <MudNavLink Href="credentials" Icon="@Icons.Material.Filled.Key">@L["nav.credentials"]</MudNavLink>
+            <AuthorizeView Policy="@FlowSharp.Domain.Security.AppPermissions.CredentialsManage">
+                <MudNavLink Href="credentials" Icon="@Icons.Material.Filled.Key">@L["nav.credentials"]</MudNavLink>
+            </AuthorizeView>
             <AuthorizeView Policy="@FlowSharp.Domain.Security.AppPermissions.PluginsManage">
                 <MudNavLink Href="marketplace" Icon="@Icons.Material.Filled.Extension">@L["nav.marketplace"]</MudNavLink>
             </AuthorizeView>

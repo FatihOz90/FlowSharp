@@ -1,3 +1,6 @@
+using System.IO;
+using System.Net;
+using System.Net.Sockets;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
@@ -32,7 +35,8 @@ public static class DependencyInjection
             switch (databaseProvider)
             {
                 case DatabaseProviders.SqlServer:
-                    options.UseSqlServer(connectionString);
+                    options.UseSqlServer(connectionString,
+                        sql => sql.MigrationsAssembly("FlowSharp.Migrations.SqlServer"));
                     break;
                 case DatabaseProviders.Sqlite:
                     // Web ve Worker ayni dosyaya erisir; SQLITE_BUSY'de hemen hata vermek yerine
@@ -42,17 +46,32 @@ public static class DependencyInjection
                         DefaultTimeout = 30,
                         Pooling = true
                     }.ConnectionString;
-                    options.UseSqlite(sqliteConnectionString);
+                    options.UseSqlite(sqliteConnectionString,
+                        sql => sql.MigrationsAssembly("FlowSharp.Migrations.Sqlite"));
                     break;
                 default:
-                    options.UseNpgsql(connectionString);
+                    options.UseNpgsql(connectionString,
+                        sql => sql.MigrationsAssembly("FlowSharp.Migrations.Postgres"));
                     break;
             }
         });
         services.Configure<HttpNodeNetworkOptions>(configuration.GetSection(HttpNodeNetworkOptions.SectionName));
         services.AddTransient<PrivateNetworkBlockingHandler>();
         services.AddHttpClient("workflow-nodes")
-            .AddHttpMessageHandler<PrivateNetworkBlockingHandler>();
+            // Erken kontrol (literal IP/sema). Asil zorlama asagidaki ConnectCallback'te.
+            .AddHttpMessageHandler<PrivateNetworkBlockingHandler>()
+            // SSRF zorlamasini gercek baglanti anina tasir: her hop (redirect dahil) icin
+            // hedef IP dogrulanir ve dogrulanan IP'ye pinlenerek baglanilir; boylece DNS
+            // rebinding (TOCTOU) ve public->private yonlendirme ile atlatma engellenir.
+            .ConfigurePrimaryHttpMessageHandler(sp =>
+            {
+                var monitor = sp.GetRequiredService<IOptionsMonitor<HttpNodeNetworkOptions>>();
+                return new SocketsHttpHandler
+                {
+                    ConnectCallback = (context, cancellationToken) =>
+                        ConnectGuardedAsync(context, monitor, cancellationToken)
+                };
+            });
 
         // Kuyruk ve calistirma
         services.AddScoped<IWorkflowQueue>(sp =>
@@ -127,5 +146,62 @@ public static class DependencyInjection
     {
         services.AddHostedService<SchedulerService>();
         return services;
+    }
+
+    /// <summary>
+    /// Cikis HTTP baglantisini DNS'i bir kez cozerek, blok modunda tum cozumlenen adresleri
+    /// dogrulayarak ve yalniz dogrulanan adres(ler)e baglanarak kurar. ConnectCallback her
+    /// fiziksel baglanti (ve dolayisiyla her redirect hop'u) icin tetiklendiginden, public
+    /// modda private/localhost hedeflere ne dogrudan ne de yonlendirme/DNS rebinding ile ulasilamaz.
+    /// </summary>
+    private static async ValueTask<Stream> ConnectGuardedAsync(
+        SocketsHttpConnectionContext context,
+        IOptionsMonitor<HttpNodeNetworkOptions> monitor,
+        CancellationToken cancellationToken)
+    {
+        var endpoint = context.DnsEndPoint;
+
+        IPAddress[] addresses = IPAddress.TryParse(endpoint.Host, out var literal)
+            ? [literal]
+            : await Dns.GetHostAddressesAsync(endpoint.Host, cancellationToken);
+
+        if (addresses.Length == 0)
+        {
+            throw new InvalidOperationException($"'{endpoint.Host}' icin DNS kaydi bulunamadi.");
+        }
+
+        var block = monitor.CurrentValue.ShouldBlockPrivateNetworks;
+        if (block)
+        {
+            foreach (var address in addresses)
+            {
+                if (PrivateNetworkGuard.IsBlocked(address))
+                {
+                    throw new InvalidOperationException(
+                        $"Public modda private/localhost hedeflerine HTTP istegi engellendi: {endpoint.Host}");
+                }
+            }
+        }
+
+        // Dogrulanan adres(ler)e pinleyerek baglan: ikinci bir DNS cozumu yok (rebinding'e kapali).
+        var socket = new Socket(SocketType.Stream, ProtocolType.Tcp) { NoDelay = true };
+        try
+        {
+            await socket.ConnectAsync(addresses, endpoint.Port, cancellationToken);
+
+            // Savunma derinligi: gercekten baglanilan uzak adres de izinli olmali.
+            if (block && socket.RemoteEndPoint is IPEndPoint remote && PrivateNetworkGuard.IsBlocked(remote.Address))
+            {
+                throw new InvalidOperationException(
+                    $"Public modda private/localhost hedeflerine HTTP istegi engellendi: {endpoint.Host}");
+            }
+
+            return new NetworkStream(socket, ownsSocket: true);
+        }
+        catch
+        {
+            socket.Dispose();
+            throw;
+        }
     }
 }

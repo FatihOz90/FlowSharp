@@ -22,7 +22,8 @@ internal sealed class NodeExecutionContext(
     IServiceProvider services,
     Action<string> logSink,
     CancellationToken cancellationToken,
-    Guid? workflowId = null) : INodeExecutionContext
+    Guid? workflowId = null,
+    string? actorOwnerId = null) : INodeExecutionContext
 {
     public string NodeKey => nodeKey;
 
@@ -94,7 +95,9 @@ internal sealed class NodeExecutionContext(
 
         if (raw is JsonValue value && value.TryGetValue<string>(out var text) && evaluator.ContainsExpression(text))
         {
-            return evaluator.EvaluateToNode(text, BuildContext(itemIndex));
+            // Ifade item icindeki parent'li bir dugumu dondurebilir; cagiranlar baska yapilara
+            // ekleyebildigi icin (raw.DeepClone() dali ile tutarli olacak sekilde) kopyalanir.
+            return evaluator.EvaluateToNode(text, BuildContext(itemIndex))?.DeepClone();
         }
 
         return raw.DeepClone();
@@ -121,7 +124,9 @@ internal sealed class NodeExecutionContext(
                 }
                 return resolvedArray;
             case JsonValue jsonValue when jsonValue.TryGetValue<string>(out var text) && evaluator.ContainsExpression(text):
-                return evaluator.EvaluateToNode(text, BuildContext(itemIndex));
+                // Tek-ifade cozumu item'in icindeki (parent'li) bir dugumu dondurebilir; yeni
+                // yapiya eklemeden once kopyala, aksi halde "node already has a parent" hatasi olur.
+                return evaluator.EvaluateToNode(text, BuildContext(itemIndex))?.DeepClone();
             default:
                 return value.DeepClone();
         }
@@ -136,10 +141,15 @@ internal sealed class NodeExecutionContext(
             return null;
         }
 
-        var data = await store.ResolveAsync(type, name, cancellationToken);
+        // Yeni referanslar credential Id'sini (Guid) tasir; eski kayitlar isim tasiyabilir.
+        // Her iki yolda da sahiplik (actorOwnerId) dogrulanir: yalniz ayni sahibe ait credential cozulur.
+        var data = Guid.TryParse(name, out var credentialId)
+            ? await store.ResolveAsync(credentialId, actorOwnerId, cancellationToken)
+            : await store.ResolveAsync(type, name, actorOwnerId, cancellationToken);
+
         if (data is null)
         {
-            logSink($"Credential bulunamadi: {type}/{name}");
+            logSink($"Credential bulunamadi veya erisim yok: {type}/{name}");
             return null;
         }
 

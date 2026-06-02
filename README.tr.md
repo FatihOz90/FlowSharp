@@ -15,29 +15,6 @@ FlowSharp, **C#**, **.NET 10** ve **Blazor** ile geliştirilen node tabanlı bir
 - Runtime plugin sistemi: C# kaynak dosyalarını `plugins/` klasörüne bırakıp uygulamayı yeniden derlemeden yeni node yükleme.
 - ASP.NET Core Identity, rol/permission policy altyapısı, şifreli credential saklama, SignalR canlı olaylar ve Serilog logları.
 
-## Kullanılan Kütüphaneler
-
-| Paket | Sürüm | Kullanım |
-|---|---|---|
-| `Microsoft.SemanticKernel` | 1.77.0 | AI Agent ve sohbet modelleri |
-| `MudBlazor` | 9.5.0 | UI bileşenleri |
-| `MailKit` | 4.17.0 | SMTP gönderimi ve IMAP okuma |
-| `Jint` | 4.9.2 | Code node - sandbox JavaScript |
-| `CsvHelper` | 33.0.1 | CSV node - CSV okuma/yazma |
-| `AngleSharp` | 1.1.2 | HTML Extract node - CSS selector ayrıştırma |
-| `ClosedXML` | 0.104.2 | Spreadsheet node - Excel (.xlsx) okuma |
-| `Microsoft.Data.Sqlite` | 10.0.0 | RAG - SQLite vektör deposu |
-| `SmartComponents.LocalEmbeddings` | 0.1.0-preview10148 | RAG - yerel/in-process embedding |
-| `Npgsql.EntityFrameworkCore.PostgreSQL` | 10.0.2 | PostgreSQL + EF Core |
-| `Microsoft.EntityFrameworkCore.SqlServer` | 10.0.8 | SQL Server + EF Core |
-| `Microsoft.EntityFrameworkCore.Sqlite` | 10.0.8 | SQLite + EF Core |
-| `Microsoft.EntityFrameworkCore.Design` / `.Tools` | 10.0.8 | Migration araçları |
-| `Microsoft.AspNetCore.Identity.EntityFrameworkCore` | 10.0.8 | Identity depolama |
-| `Microsoft.CodeAnalysis.CSharp` / Workspaces | 5.3.0 | Roslyn runtime plugin derleme |
-| `StackExchange.Redis` | 2.13.17 | Workflow olay backplane'i |
-| `Cronos` | 0.13.0 | Cron ifadesi ayrıştırma |
-| `Serilog.AspNetCore` / Sinks | 10.0.0 / 6.1.1 / 7.0.0 | Loglama |
-
 ## Hızlı Başlangıç
 
 Docker Compose ile stack'i çalıştırın:
@@ -97,29 +74,50 @@ Tek process geliştirme modu için:
 }
 ```
 
-## Veritabanı Desteği
 
-FlowSharp şu EF Core provider'larını destekler:
+## Veritabanı ve Migration'lar
 
-- `Sqlite`
-- `Postgres`
-- `SqlServer`
+FlowSharp, Entity Framework Core üzerine kuruludur ve kutudan çıktığı haliyle üç veritabanı sağlayıcısını destekler:
 
-Varsayılan lokal SQLite connection string:
+| Sağlayıcı | `Database:Provider` | Önerilen kullanım |
+|---|---|---|
+| SQLite | `Sqlite` | Lokal geliştirme ve tek düğümlü / küçük ekip self-hosting |
+| PostgreSQL | `Postgres` | Üretim ve çok kullanıcılı dağıtımlar |
+| SQL Server | `SqlServer` | Microsoft SQL Server standardına sahip ortamlar |
+
+### Sağlayıcı seçimi
+
+Aktif sağlayıcı tamamen yapılandırma ile belirlenir — kod değişikliği gerekmez. Sağlayıcı anahtarını ve uygun bağlantı dizesini ayarlamanız yeterlidir:
 
 ```json
 {
-  "Database": {
-    "Provider": "Sqlite",
-    "ApplyMigrationsOnStartup": true
-  },
-  "ConnectionStrings": {
-    "DefaultConnection": "Data Source=App_Data/flowsharp.db"
-  }
+  "Database": { "Provider": "Postgres", "ApplyMigrationsOnStartup": true },
+  "ConnectionStrings": { "DefaultConnection": "Host=...;Database=...;Username=...;Password=..." }
 }
 ```
 
-PostgreSQL, SQL Server, Redis, plugin, credential ve production ayarları için [Configuration](docs/guide/configuration.md) dokümanına bakın.
+`ApplyMigrationsOnStartup` `true` olduğunda, uygulama seçilen sağlayıcının migration'larını açılışta otomatik uygular. Yeni bir veritabanı tüm şemayı, mevcut bir veritabanı yalnızca bekleyen migration'ları alır; böylece güvenli ve veri kaybına yol açmayan şema yükseltmesi sağlanır. Eşzamanlı çalışan instance'lar EF Core'un migration kilidiyle koordine edilir.
+
+### Sağlayıcıya özel migration setleri
+
+Her sağlayıcı kendi native migration assembly'sini barındırır; böylece kolon tipleri hedef motor için her zaman doğrudur (örneğin PostgreSQL'de `jsonb`, SQLite'ta `TEXT`, SQL Server'da `nvarchar(max)`):
+
+```text
+src/FlowSharp.Migrations.Sqlite
+src/FlowSharp.Migrations.Postgres
+src/FlowSharp.Migrations.SqlServer
+```
+
+Çalışma zamanında uygun set, yapılandırılan sağlayıcıya göre otomatik seçilir.
+
+### Operatörler
+
+Hiçbir migration komutu gerekmez. Bir sağlayıcı seçin, bağlantı dizesini verin ve uygulamayı başlatın — şema otomatik olarak oluşturulur ve güncel tutulur.
+
+### Katkıda bulunanlar
+
+Veri modeli değiştiğinde (yeni veya değiştirilmiş bir entity), setlerin senkron kalması için **üç sağlayıcı için de** migration üretin. Komutların tamamı [Veritabanı ve Migration'lar](docs/guide/database-migrations.md) belgesinde yer alır.
+
 
 ## Dokümantasyon
 
@@ -132,6 +130,7 @@ PostgreSQL, SQL Server, Redis, plugin, credential ve production ayarları için 
 - [Webhooks](docs/guide/webhooks.md)
 - [Plugin Development](docs/guide/plugin-development.md)
 - [Marketplace](docs/guide/marketplace.md)
+- [Database & Migrations](docs/guide/database-migrations.md)
 
 ## Proje Yapısı
 

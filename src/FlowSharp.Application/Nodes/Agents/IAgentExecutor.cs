@@ -23,7 +23,8 @@ public sealed record AgentRequest(
     IReadOnlyList<AgentSubNode> Subs,
     AgentContextFactory ContextFactory,
     Func<NodeRunData, Task>? OnSubNodeCompleted = null,
-    Func<string, Task>? OnTextDelta = null);
+    Func<string, Task>? OnTextDelta = null,
+    string? ActorOwnerId = null);
 
 /// <summary>AI agent calistirma sonucu.</summary>
 public sealed record AgentResult(bool Succeeded, NodeItem Item, string? Error)

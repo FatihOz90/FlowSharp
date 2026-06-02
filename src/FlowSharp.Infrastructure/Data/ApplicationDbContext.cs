@@ -34,6 +34,8 @@ public sealed class ApplicationDbContext(DbContextOptions<ApplicationDbContext> 
         {
             entity.ToTable("workflows");
             entity.Property(workflow => workflow.Name).HasMaxLength(200).IsRequired();
+            entity.Property(workflow => workflow.OwnerId).HasMaxLength(450);
+            entity.HasIndex(workflow => workflow.OwnerId);
             entity.Property(workflow => workflow.Description).HasMaxLength(1000);
             entity.Property(workflow => workflow.Definition).ConfigureJsonDocument(jsonColumnType);
             entity.HasMany(workflow => workflow.Executions)
@@ -65,9 +67,11 @@ public sealed class ApplicationDbContext(DbContextOptions<ApplicationDbContext> 
         {
             entity.ToTable("credentials");
             entity.Property(credential => credential.Name).HasMaxLength(200).IsRequired();
+            entity.Property(credential => credential.OwnerId).HasMaxLength(450);
             entity.Property(credential => credential.Type).HasMaxLength(100).IsRequired();
             entity.Property(credential => credential.EncryptedData).IsRequired();
-            entity.HasIndex(credential => new { credential.Type, credential.Name }).IsUnique();
+            // Ayni sahip altinda (tip, ad) benzersiz; farkli kullanicilar ayni adi kullanabilir.
+            entity.HasIndex(credential => new { credential.OwnerId, credential.Type, credential.Name }).IsUnique();
         });
 
         builder.Entity<WebhookRegistration>(entity =>

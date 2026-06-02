@@ -4,23 +4,37 @@ FlowSharp uses ASP.NET Core Identity roles plus permission claims. Each permissi
 
 ## Seeded Roles
 
-FlowSharp seeds three roles on startup:
+FlowSharp seeds four roles on startup:
 
 | Role | Purpose |
 |---|---|
-| `Admin` | Full access to workflows, executions, and plugin management. |
+| `Admin` | Full access, including credential and plugin management. |
 | `Editor` | Can create, edit, and execute workflows. |
+| `Member` | Default role assigned to self-registered users; same workflow capabilities as `Editor`. |
 | `Viewer` | Can view workflows and execution history. |
+
+`Editor` and `Member` share the same permission set. The distinction is operational: `Member` is granted automatically when a user signs up through self-registration, whereas `Editor` is assigned by an administrator.
 
 ## Permission Matrix
 
-| Permission | Description | Admin | Editor | Viewer |
-|---|---|:---:|:---:|:---:|
-| `workflows.read` | View workflow list and workflow details. | Yes | Yes | Yes |
-| `workflows.write` | Create, edit, and save workflows and credentials. | Yes | Yes | No |
-| `workflows.execute` | Run workflows from the UI. | Yes | Yes | No |
-| `executions.read` | View workflow execution history and logs. | Yes | Yes | Yes |
-| `plugins.manage` | Access marketplace and manage plugins. | Yes | No | No |
+| Permission | Description | Admin | Editor | Member | Viewer |
+|---|---|:---:|:---:|:---:|:---:|
+| `workflows.read` | View workflow list and workflow details. | Yes | Yes | Yes | Yes |
+| `workflows.write` | Create, edit, and save workflows. | Yes | Yes | Yes | No |
+| `workflows.execute` | Run workflows from the UI. | Yes | Yes | Yes | No |
+| `executions.read` | View workflow execution history and logs. | Yes | Yes | Yes | Yes |
+| `credentials.manage` | Create, edit, delete, and view stored credentials. | Yes | No | No | No |
+| `plugins.manage` | Access marketplace and manage plugins. | Yes | No | No | No |
+
+## Data Isolation (Ownership)
+
+Workflows and credentials carry an owner. Non-administrators see and manage **only their own** records:
+
+- A user's workflow list, designer, executions, and dashboard counts are scoped to records they own.
+- Credentials are resolved at execution time only when the credential owner matches the workflow owner, preventing cross-tenant secret access.
+- `Admin` is exempt from ownership filtering and can see all records.
+
+This makes self-registration safe in multi-user deployments: each user operates within an isolated workspace.
 
 ## Where Permissions Are Defined
 
@@ -30,10 +44,11 @@ Permissions live in:
 src/FlowSharp.Domain/Security/AppPermissions.cs
 ```
 
-Role-to-permission seeding lives in:
+Role-to-permission seeding and self-registration role assignment live in:
 
 ```text
 src/FlowSharp.Infrastructure/Identity/IdentitySeeder.cs
+src/FlowSharp.Web/Components/Account/Pages/Register.razor
 ```
 
 Authorization policies are registered during web startup:
@@ -48,7 +63,7 @@ src/FlowSharp.Web/Program.cs
 |---|---|
 | Workflows page | `workflows.read` |
 | Workflow designer | `workflows.write` |
-| Credentials page | `workflows.write` |
+| Credentials page | `credentials.manage` |
 | Executions page | `executions.read` |
 | Marketplace page | `plugins.manage` |
 | Marketplace navigation links | `plugins.manage` |
@@ -70,3 +85,12 @@ When seeding is enabled and no users exist, FlowSharp creates the first admin us
 ```
 
 The first user is assigned to the `Admin` role.
+
+## Self-Registration
+
+Users who register through the sign-up page are automatically granted the `Member` role and operate within their own isolated workspace (see [Data Isolation](#data-isolation-ownership)).
+
+Account confirmation is governed by `Identity:RequireConfirmedAccount`:
+
+- `false` — users can sign in immediately after registering (no email verification).
+- `true` — a confirmation email is sent and must be acknowledged before sign-in. This requires a working SMTP configuration (see [Configuration](configuration.md)).

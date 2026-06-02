@@ -7,6 +7,7 @@ public static class AppPermissions
     public const string WorkflowsExecute = "workflows.execute";
     public const string ExecutionsRead = "executions.read";
     public const string PluginsManage = "plugins.manage";
+    public const string CredentialsManage = "credentials.manage";
 
     public static readonly string[] All =
     [
@@ -14,6 +15,7 @@ public static class AppPermissions
         WorkflowsWrite,
         WorkflowsExecute,
         ExecutionsRead,
-        PluginsManage
+        PluginsManage,
+        CredentialsManage
     ];
 }

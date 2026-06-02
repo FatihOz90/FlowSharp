@@ -9,15 +9,24 @@ namespace FlowSharp.Infrastructure.Credentials;
 
 public sealed class CredentialStore(ApplicationDbContext dbContext, ICredentialProtector protector) : ICredentialStore
 {
-    public async Task<IReadOnlyList<CredentialSummary>> ListAsync(CancellationToken cancellationToken = default) =>
-        await dbContext.Credentials
-            .OrderBy(credential => credential.Name)
-            .Select(credential => new CredentialSummary(credential.Id, credential.Name, credential.Type, credential.CreatedAt))
-            .ToListAsync(cancellationToken);
-
-    public async Task<CredentialDetail?> GetAsync(Guid id, CancellationToken cancellationToken = default)
+    public async Task<IReadOnlyList<CredentialSummary>> ListAsync(string? ownerId, CancellationToken cancellationToken = default)
     {
-        var credential = await dbContext.Credentials.FirstOrDefaultAsync(item => item.Id == id, cancellationToken);
+        var query = dbContext.Credentials.AsQueryable();
+        if (ownerId is not null)
+        {
+            query = query.Where(credential => credential.OwnerId == ownerId);
+        }
+
+        return await query
+            .OrderBy(credential => credential.Name)
+            .Select(credential => new CredentialSummary(credential.Id, credential.Name, credential.Type, credential.CreatedAt, credential.OwnerId))
+            .ToListAsync(cancellationToken);
+    }
+
+    public async Task<CredentialDetail?> GetAsync(Guid id, string? ownerId, CancellationToken cancellationToken = default)
+    {
+        var credential = await dbContext.Credentials
+            .FirstOrDefaultAsync(item => item.Id == id && (ownerId == null || item.OwnerId == ownerId), cancellationToken);
         return credential is null ? null : new CredentialDetail(credential.Id, credential.Name, credential.Type, Decrypt(credential));
     }
 
@@ -28,6 +37,7 @@ public sealed class CredentialStore(ApplicationDbContext dbContext, ICredentialP
         Credential credential;
         if (input.Id is { } id && await dbContext.Credentials.FirstOrDefaultAsync(item => item.Id == id, cancellationToken) is { } existing)
         {
+            // Guncelleme: sahip degistirilmez (baskasinin kaydini ele gecirmeyi onler).
             existing.Name = input.Name;
             existing.Type = input.Type;
             existing.EncryptedData = encrypted;
@@ -36,7 +46,7 @@ public sealed class CredentialStore(ApplicationDbContext dbContext, ICredentialP
         }
         else
         {
-            credential = new Credential { Name = input.Name, Type = input.Type, EncryptedData = encrypted };
+            credential = new Credential { Name = input.Name, Type = input.Type, EncryptedData = encrypted, OwnerId = input.OwnerId };
             dbContext.Credentials.Add(credential);
         }
 
@@ -44,16 +54,27 @@ public sealed class CredentialStore(ApplicationDbContext dbContext, ICredentialP
         return credential.Id;
     }
 
-    public async Task DeleteAsync(Guid id, CancellationToken cancellationToken = default)
+    public async Task DeleteAsync(Guid id, string? ownerId, CancellationToken cancellationToken = default)
     {
-        await dbContext.Credentials.Where(credential => credential.Id == id).ExecuteDeleteAsync(cancellationToken);
+        await dbContext.Credentials
+            .Where(credential => credential.Id == id && (ownerId == null || credential.OwnerId == ownerId))
+            .ExecuteDeleteAsync(cancellationToken);
     }
 
-    public async Task<IReadOnlyDictionary<string, string>?> ResolveAsync(string type, string name, CancellationToken cancellationToken = default)
+    public async Task<IReadOnlyDictionary<string, string>?> ResolveAsync(Guid id, string? expectedOwnerId, CancellationToken cancellationToken = default)
     {
         var credential = await dbContext.Credentials
             .AsNoTracking()
-            .FirstOrDefaultAsync(item => item.Type == type && item.Name == name, cancellationToken);
+            .FirstOrDefaultAsync(item => item.Id == id && item.OwnerId == expectedOwnerId, cancellationToken);
+
+        return credential is null ? null : Decrypt(credential);
+    }
+
+    public async Task<IReadOnlyDictionary<string, string>?> ResolveAsync(string type, string name, string? expectedOwnerId, CancellationToken cancellationToken = default)
+    {
+        var credential = await dbContext.Credentials
+            .AsNoTracking()
+            .FirstOrDefaultAsync(item => item.Type == type && item.Name == name && item.OwnerId == expectedOwnerId, cancellationToken);
 
         return credential is null ? null : Decrypt(credential);
     }

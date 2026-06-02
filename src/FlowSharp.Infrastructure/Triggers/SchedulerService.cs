@@ -92,7 +92,8 @@ public sealed class SchedulerService(
         }
     }
 
-    private static IEnumerable<(string NodeName, string Cron)> ExtractSchedules(JsonElement definition)
+    // internal: zamanlama ayiklama mantigi (saf) birim testlerinden erisilebilsin.
+    internal static IEnumerable<(string NodeName, string Cron)> ExtractSchedules(JsonElement definition)
     {
         if (!definition.TryGetProperty("nodes", out var nodes) || nodes.ValueKind != JsonValueKind.Array)
         {

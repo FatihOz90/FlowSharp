@@ -37,9 +37,11 @@ Below is the standard configuration template:
 
 Set `Database:Provider` to one of:
 
-*   **`Postgres`**: Default production provider. Uses the existing EF Core migrations.
-*   **`SqlServer`**: Uses SQL Server via EF Core. On startup, FlowSharp creates the schema when migrations are enabled.
-*   **`Sqlite`**: Local and single-node friendly provider. On startup, FlowSharp creates the schema when migrations are enabled.
+*   **`Postgres`**: Recommended for production and multi-user deployments.
+*   **`SqlServer`**: For environments standardised on Microsoft SQL Server.
+*   **`Sqlite`**: Local development and single-node / small-team self-hosting.
+
+Each provider ships with its own native migration set, applied automatically at startup when `ApplyMigrationsOnStartup` is `true`. See [Database & Migrations](database-migrations.md) for details.
 
 ### SQL Server
 
@@ -68,3 +70,55 @@ Set `Database:Provider` to one of:
   }
 }
 ```
+
+## Authentication & Email
+
+### Account confirmation
+
+`Identity:RequireConfirmedAccount` controls whether new accounts must verify their email address before signing in:
+
+```jsonc
+{
+  "Identity": {
+    "RequireConfirmedAccount": false
+  }
+}
+```
+
+*   **`false`**: Users can sign in immediately after registering. Convenient for local development and trusted environments.
+*   **`true`**: A confirmation email is sent on registration and must be acknowledged before sign-in. Requires a working SMTP configuration (see below).
+
+Self-registered users are automatically assigned the `Member` role. See [Roles And Permissions](roles-and-permissions.md) for the resulting capabilities and data isolation.
+
+### SMTP (email delivery)
+
+Email — account confirmation and password reset — is delivered over SMTP using the `Email` section:
+
+```jsonc
+{
+  "Email": {
+    "Host": "smtp.example.com",
+    "Port": 587,
+    "EnableSsl": true,
+    "User": "no-reply@example.com",
+    "Password": "<smtp-password>",
+    "From": "no-reply@example.com",
+    "FromName": "FlowSharp"
+  }
+}
+```
+
+| Setting | Description |
+|---|---|
+| `Email:Host` | SMTP server host. **If left empty, no email is sent** — the message body (including confirmation links) is written to the application log instead. This keeps local development frictionless. |
+| `Email:Port` | SMTP port. Defaults to `587`. |
+| `Email:EnableSsl` | Enables SSL/TLS. Defaults to `true`. |
+| `Email:User` / `Email:Password` | SMTP credentials. If `User` is empty, the connection is made without authentication. |
+| `Email:From` | Sender address. Falls back to `Email:User` when omitted. |
+| `Email:FromName` | Display name for the sender. Defaults to `FlowSharp`. |
+
+::: tip
+If you enable `Identity:RequireConfirmedAccount`, configure a real `Email:Host` so confirmation emails are actually delivered. With no SMTP host configured, the confirmation link is only available in the application log.
+:::
+
+Provide secrets such as `Email:Password` through environment variables or a secret manager rather than committing them — for example `Email__Password`.

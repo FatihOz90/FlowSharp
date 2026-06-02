@@ -1,4 +1,5 @@
 using Microsoft.AspNetCore.Components;
+using Microsoft.AspNetCore.Components.Authorization;
 using Microsoft.EntityFrameworkCore;
 using System;
 using System.Collections.Generic;
@@ -12,6 +13,7 @@ namespace FlowSharp.Web.Components.Pages;
 public partial class Executions
 {
     [Inject] public ApplicationDbContext DbContext { get; set; } = default!;
+    [Inject] public AuthenticationStateProvider AuthenticationStateProvider { get; set; } = default!;
 
     private List<WorkflowExecution>? executions;
 
@@ -19,8 +21,18 @@ public partial class Executions
 
     private async Task ReloadAsync()
     {
-        executions = await DbContext.WorkflowExecutions
+        var (currentUserId, isAdmin) = await FlowSharp.Web.Security.CurrentUser.ResolveAsync(AuthenticationStateProvider);
+
+        var query = DbContext.WorkflowExecutions
             .Include(e => e.Workflow)
+            .AsQueryable();
+        if (!isAdmin)
+        {
+            // Yalniz oturum sahibinin workflow'larina ait yurutmeler.
+            query = query.Where(e => e.Workflow != null && e.Workflow.OwnerId == currentUserId);
+        }
+
+        executions = await query
             .OrderByDescending(e => e.CreatedAt)
             .Take(50)
             .AsNoTracking()

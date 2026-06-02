@@ -11,6 +11,10 @@ public sealed class Credential : AuditableEntity
 {
     public required string Name { get; set; }
 
+    /// <summary>Bu credential'i olusturan kullanicinin Identity Id'si (sahiplik/izolasyon).
+    /// null ise sistem/eski kayit; yalniz sahibi (ya da Admin) gorur ve kullanabilir.</summary>
+    public string? OwnerId { get; set; }
+
     /// <summary>Credential tip anahtari (orn. "httpHeaderAuth", "openAiApi", "postgres").</summary>
     public required string Type { get; set; }
 

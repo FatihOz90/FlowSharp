@@ -15,28 +15,6 @@ FlowSharp is a node-based workflow automation platform built with **C#**, **.NET
 - Runtime plugin system: drop C# source files into `plugins/` and load new nodes without rebuilding the app.
 - ASP.NET Core Identity, role/permission policies, encrypted credentials, SignalR live events, and Serilog logs.
 
-## Libraries Used
-
-| Package | Version | Purpose |
-|---|---|---|
-| `Microsoft.SemanticKernel` | 1.77.0 | AI Agent and chat models |
-| `MudBlazor` | 9.5.0 | UI components |
-| `MailKit` | 4.17.0 | SMTP sending and IMAP reading |
-| `Jint` | 4.9.2 | Code node - sandboxed JavaScript |
-| `CsvHelper` | 33.0.1 | CSV node - read/write CSV |
-| `AngleSharp` | 1.1.2 | HTML Extract node - CSS selector parsing |
-| `ClosedXML` | 0.104.2 | Spreadsheet node - Excel (.xlsx) reading |
-| `Microsoft.Data.Sqlite` | 10.0.0 | RAG - SQLite vector store |
-| `SmartComponents.LocalEmbeddings` | 0.1.0-preview10148 | RAG - local/in-process embeddings |
-| `Npgsql.EntityFrameworkCore.PostgreSQL` | 10.0.2 | PostgreSQL + EF Core |
-| `Microsoft.EntityFrameworkCore.SqlServer` | 10.0.8 | SQL Server + EF Core |
-| `Microsoft.EntityFrameworkCore.Sqlite` | 10.0.8 | SQLite + EF Core |
-| `Microsoft.EntityFrameworkCore.Design` / `.Tools` | 10.0.8 | Migration tooling |
-| `Microsoft.AspNetCore.Identity.EntityFrameworkCore` | 10.0.8 | Identity storage |
-| `Microsoft.CodeAnalysis.CSharp` / Workspaces | 5.3.0 | Roslyn runtime plugin compilation |
-| `StackExchange.Redis` | 2.13.17 | Workflow event backplane |
-| `Cronos` | 0.13.0 | Cron expression parsing |
-| `Serilog.AspNetCore` / Sinks | 10.0.0 / 6.1.1 / 7.0.0 | Logging |
 
 ## Quick Start
 
@@ -97,29 +75,69 @@ For single-process development, set:
 }
 ```
 
-## Database Support
+## Database & Migrations
 
-FlowSharp supports these EF Core providers:
+FlowSharp is built on Entity Framework Core and supports three database providers out of the box:
 
-- `Sqlite`
-- `Postgres`
-- `SqlServer`
+| Provider | `Database:Provider` | Recommended use |
+|---|---|---|
+| SQLite | `Sqlite` | Local development and single-node / small-team self-hosting |
+| PostgreSQL | `Postgres` | Production and multi-user deployments |
+| SQL Server | `SqlServer` | Environments standardised on Microsoft SQL Server |
 
-Default local SQLite connection string:
+### Selecting a provider
+
+The active provider is determined entirely by configuration — no code changes are required. Set the provider key and a matching connection string:
 
 ```json
 {
-  "Database": {
-    "Provider": "Sqlite",
-    "ApplyMigrationsOnStartup": true
-  },
-  "ConnectionStrings": {
-    "DefaultConnection": "Data Source=App_Data/flowsharp.db"
-  }
+  "Database": { "Provider": "Postgres", "ApplyMigrationsOnStartup": true },
+  "ConnectionStrings": { "DefaultConnection": "Host=...;Database=...;Username=...;Password=..." }
 }
 ```
 
-See [Configuration](docs/guide/configuration.md) for PostgreSQL, SQL Server, Redis, plugins, credentials, and production settings.
+When `ApplyMigrationsOnStartup` is `true`, the application applies the selected provider's migrations automatically at startup. A new database receives the full schema; an existing database receives only the pending migrations, enabling safe, non-destructive schema upgrades. Concurrent instances are coordinated through EF Core's migration lock.
+
+### Provider-specific migration sets
+
+Each provider maintains its own native migration assembly, so column types are always correct for the target engine (for example `jsonb` on PostgreSQL, `TEXT` on SQLite, `nvarchar(max)` on SQL Server):
+
+```text
+src/FlowSharp.Migrations.Sqlite
+src/FlowSharp.Migrations.Postgres
+src/FlowSharp.Migrations.SqlServer
+```
+
+At runtime the matching set is selected automatically based on the configured provider.
+
+### Operators
+
+No migration commands are ever required. Select a provider, supply a connection string, and start the application — the schema is created and kept up to date automatically.
+
+### Contributors
+
+When the data model changes (a new or modified entity), generate a migration for **all three** providers so the sets stay in sync. The exact commands are documented in [Database & Migrations](docs/guide/database-migrations.md).
+
+
+## Testing
+
+Run the test suite:
+
+```powershell
+dotnet test
+```
+
+Generate a browsable HTML code coverage report (cleans old results, restores the
+local `reportgenerator` tool, runs tests with coverage, writes the report to
+`tests/FlowSharp.Tests/CoverageReport/index.html`):
+
+```powershell
+./scripts/coverage.ps1
+```
+
+The script is cross-platform (PowerShell 7+). Use `-NoOpen` in CI to skip opening
+the browser. Coverage output (`TestResults/`, `CoverageReport/`) is git-ignored.
+
 
 ## Documentation
 
@@ -132,6 +150,7 @@ See [Configuration](docs/guide/configuration.md) for PostgreSQL, SQL Server, Red
 - [Webhooks](docs/guide/webhooks.md)
 - [Plugin Development](docs/guide/plugin-development.md)
 - [Marketplace](docs/guide/marketplace.md)
+- [Database & Migrations](docs/guide/database-migrations.md)
 
 ## Project Structure
 

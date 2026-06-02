@@ -17,7 +17,8 @@ export default defineConfig({
         items: [
           { text: 'Getting Started', link: '/guide/getting-started' },
           { text: 'Architecture', link: '/guide/architecture' },
-          { text: 'Configuration', link: '/guide/configuration' }
+          { text: 'Configuration', link: '/guide/configuration' },
+          { text: 'Database & Migrations', link: '/guide/database-migrations' }
         ]
       },
       {

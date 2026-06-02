@@ -1,5 +1,8 @@
 using Microsoft.AspNetCore.Components;
+using Microsoft.AspNetCore.Components.Authorization;
+using Microsoft.EntityFrameworkCore;
 using FlowSharp.Application.Abstractions;
+using FlowSharp.Infrastructure.Data;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -10,16 +13,44 @@ namespace FlowSharp.Web.Components.Pages;
 public partial class Credentials
 {
     [Inject] public ICredentialStore CredentialStore { get; set; } = default!;
+    [Inject] public AuthenticationStateProvider AuthenticationStateProvider { get; set; } = default!;
+    [Inject] public ApplicationDbContext DbContext { get; set; } = default!;
+    [Inject] public FlowSharp.Web.Services.IUiNotifier Notifier { get; set; } = default!;
 
     private IReadOnlyList<CredentialSummary>? items;
     private bool editing;
     private string? message;
     private CredentialForm form = new();
     private readonly List<FieldRow> fields = [];
+    private string? currentUserId;
+    private bool isAdmin;
+    private Dictionary<string, string> ownerEmails = [];
 
-    protected override async Task OnInitializedAsync() => await ReloadAsync();
+    // Admin gorunumu: kendi credential'lari ust tabloda, digerleri alt tabloda.
+    private IEnumerable<CredentialSummary> MineCredentials => items?.Where(c => c.OwnerId == currentUserId) ?? [];
+    private IEnumerable<CredentialSummary> OtherCredentials => items?.Where(c => c.OwnerId != currentUserId) ?? [];
 
-    private async Task ReloadAsync() => items = await CredentialStore.ListAsync();
+    // Sayfa Admin-only (CredentialsManage). Admin tum credential'lari yonetir; bu yuzden
+    // sahiplik kisiti uygulanmaz (ownerId: null). Yeni kayit, olusturan admin'e atanir.
+    protected override async Task OnInitializedAsync()
+    {
+        (currentUserId, isAdmin) = await FlowSharp.Web.Security.CurrentUser.ResolveAsync(AuthenticationStateProvider);
+        await ReloadAsync();
+    }
+
+    private async Task ReloadAsync()
+    {
+        items = await CredentialStore.ListAsync(ownerId: null);
+
+        var ownerIds = items.Where(c => c.OwnerId != null).Select(c => c.OwnerId!).Distinct().ToList();
+        ownerEmails = await DbContext.Users
+            .Where(u => ownerIds.Contains(u.Id))
+            .ToDictionaryAsync(u => u.Id, u => u.Email ?? u.UserName ?? u.Id);
+    }
+
+    /// <summary>Credential sahibinin gosterilecek etiketi (e-posta); sahipsizse "Sistem".</summary>
+    private string OwnerLabel(CredentialSummary c) =>
+        c.OwnerId is { } id && ownerEmails.TryGetValue(id, out var email) ? email : L["common.system"];
 
     private void StartCreate()
     {
@@ -32,7 +63,7 @@ public partial class Credentials
 
     private async Task EditAsync(Guid id)
     {
-        var detail = await CredentialStore.GetAsync(id);
+        var detail = await CredentialStore.GetAsync(id, ownerId: null);
         if (detail is null) return;
         form = new CredentialForm { Id = detail.Id, Name = detail.Name, Type = detail.Type };
         fields.Clear();
@@ -53,15 +84,24 @@ public partial class Credentials
         }
         var data = fields.Where(f => !string.IsNullOrWhiteSpace(f.Key))
             .ToDictionary(f => f.Key, f => f.Value ?? string.Empty);
-        await CredentialStore.SaveAsync(new CredentialInput(form.Id, form.Name, form.Type, data));
+        // Yeni kayit olusturan admin'e atanir; guncellemede sahip degismez (store korur).
+        await CredentialStore.SaveAsync(new CredentialInput(form.Id, form.Name, form.Type, data, currentUserId));
         editing = false;
         await ReloadAsync();
+        Notifier.Success(L["credentials.msg.saved"]);
     }
 
     private async Task DeleteAsync(Guid id)
     {
-        await CredentialStore.DeleteAsync(id);
+        var name = items?.FirstOrDefault(c => c.Id == id)?.Name ?? "";
+        if (!await Notifier.ConfirmDeleteAsync(name))
+        {
+            return;
+        }
+
+        await CredentialStore.DeleteAsync(id, ownerId: null);
         await ReloadAsync();
+        Notifier.Success(L["credentials.msg.deleted"]);
     }
 
     private void Cancel() => editing = false;

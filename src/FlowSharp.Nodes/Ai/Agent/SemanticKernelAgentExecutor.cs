@@ -40,7 +40,7 @@ public sealed class SemanticKernelAgentExecutor(
             selectedModel = model;
             modelStartedAt = DateTimeOffset.UtcNow;
             var (provider, credentialType, defaultModel) = GetProviderDetails(model.Type);
-            var (apiKey, endpoint, deploymentName) = await ResolveModelCredentialsAsync(model, credentialType, cancellationToken);
+            var (apiKey, endpoint, deploymentName) = await ResolveModelCredentialsAsync(model, credentialType, request.ActorOwnerId, cancellationToken);
 
             if (string.IsNullOrWhiteSpace(apiKey) && !provider.Equals("ollama", StringComparison.OrdinalIgnoreCase))
             {
@@ -403,12 +403,15 @@ public sealed class SemanticKernelAgentExecutor(
         };
 
     private async Task<(string? ApiKey, string? Endpoint, string? DeploymentName)> ResolveModelCredentialsAsync(
-        AgentSubNode model, string credentialType, CancellationToken cancellationToken)
+        AgentSubNode model, string credentialType, string? actorOwnerId, CancellationToken cancellationToken)
     {
-        var credName = model.Parameters.TryGetPropertyValue("_credential", out var c) ? c?.ToString() : null;
-        if (!string.IsNullOrWhiteSpace(credName))
+        var credRef = model.Parameters.TryGetPropertyValue("_credential", out var c) ? c?.ToString() : null;
+        if (!string.IsNullOrWhiteSpace(credRef))
         {
-            var data = await credentialStore.ResolveAsync(credentialType, credName, cancellationToken);
+            // Sahiplik dogrulamali cozumleme: yeni referanslar Id (Guid), eskiler isim tasir.
+            var data = Guid.TryParse(credRef, out var credId)
+                ? await credentialStore.ResolveAsync(credId, actorOwnerId, cancellationToken)
+                : await credentialStore.ResolveAsync(credentialType, credRef, actorOwnerId, cancellationToken);
             if (data is not null)
             {
                 data.TryGetValue("apiKey", out var apiKey);

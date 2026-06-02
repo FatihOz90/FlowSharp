@@ -23,3 +23,10 @@ src/FlowSharp.Web/plugins/*/
 docs/node_modules/
 docs/.vitepress/cache/
 docs/.vitepress/dist/
+
+tests/**/TestResults/
+tests/**/CoverageReport/
+tests/**/BenchmarkDotNet.Artifacts/
+
+# Agent (Claude Code) memory notes — local only, not for the repo
+memory/

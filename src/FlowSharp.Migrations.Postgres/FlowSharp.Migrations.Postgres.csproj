@@ -1,0 +1,16 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+
+  <!-- PostgreSQL'e ozel native migration seti. ApplicationDbContext'i Infrastructure'dan alir. -->
+  <ItemGroup>
+    <ProjectReference Include="..\FlowSharp.Infrastructure\FlowSharp.Infrastructure.csproj" />
+    <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" Version="10.0.2" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Design" Version="10.0.8" PrivateAssets="all" />
+  </ItemGroup>
+
+</Project>

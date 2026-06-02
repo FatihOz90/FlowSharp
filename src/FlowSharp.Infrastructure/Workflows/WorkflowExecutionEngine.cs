@@ -29,6 +29,7 @@ public sealed class WorkflowExecutionEngine(
         CancellationToken cancellationToken = default)
     {
         options ??= new WorkflowExecutionOptions();
+        var captureData = options.CaptureData;
 
         var nodes = ParseNodes(definition);
         var allConnections = ParseConnections(definition);
@@ -137,7 +138,7 @@ public sealed class WorkflowExecutionEngine(
                     node.Type, node.Name, node.Parameters, input,
                     subs.Select(s => new AgentSubNode(s.Sub.Id, s.Sub.Type, s.Sub.Name, s.Sub.Parameters, s.Type)).ToList(),
                     (t, n, p, items) => new NodeExecutionContext(
-                        t, n, p, items, outputsByName, trigger, 0, evaluator, services, _ => { }, cancellationToken, options.WorkflowId),
+                        t, n, p, items, outputsByName, trigger, 0, evaluator, services, _ => { }, cancellationToken, options.WorkflowId, options.ActorOwnerId),
                     async data =>
                     {
                         if (recordLog)
@@ -150,12 +151,14 @@ public sealed class WorkflowExecutionEngine(
                             await options.OnNodeCompleted(data);
                         }
                     },
-                    options.OnTextDelta);
+                    options.OnTextDelta,
+                    options.ActorOwnerId);
 
                 var agentResult = await agentExecutor.ExecuteAsync(request, cancellationToken);
                 run = agentResult.Succeeded
                     ? (new NodeRunData(node.Id, node.Name, node.Type, NodeRunStatus.Succeeded,
-                          new JsonArray { agentResult.Item.Json.DeepClone() }, null, agentStartedAt, DateTimeOffset.UtcNow, 1),
+                          captureData ? new JsonArray { agentResult.Item.Json.DeepClone() } : new JsonArray(),
+                          null, agentStartedAt, DateTimeOffset.UtcNow, 1),
                        (IReadOnlyList<IReadOnlyList<NodeItem>>)[[agentResult.Item]])
                     : (new NodeRunData(node.Id, node.Name, node.Type, NodeRunStatus.Failed,
                           new JsonObject(), agentResult.Error, agentStartedAt, DateTimeOffset.UtcNow, 0),
@@ -163,7 +166,7 @@ public sealed class WorkflowExecutionEngine(
             }
             else
             {
-                run = await ExecuteNodeAsync(node, input, outputsByName, trigger, cancellationToken, options.WorkflowId);
+                run = await ExecuteNodeAsync(node, input, outputsByName, trigger, cancellationToken, options.WorkflowId, options.ActorOwnerId, captureData);
             }
 
             if (recordLog)
@@ -234,7 +237,8 @@ public sealed class WorkflowExecutionEngine(
 
             IReadOnlyList<IReadOnlyList<NodeItem>> outputs = [accumulated, []];
             var log = new NodeRunData(region.Node.Id, region.Node.Name, region.Node.Type,
-                NodeRunStatus.Succeeded, ToJson(accumulated), null, startedAt, DateTimeOffset.UtcNow, accumulated.Count);
+                NodeRunStatus.Succeeded, captureData ? ToJson(accumulated) : new JsonArray(),
+                null, startedAt, DateTimeOffset.UtcNow, accumulated.Count);
             return (log, outputs);
         }
 
@@ -274,17 +278,18 @@ public sealed class WorkflowExecutionEngine(
             var log = await RunNodeAsync(node, input);
             if (log.Status == NodeRunStatus.Failed)
             {
-                return new WorkflowRunResult(false, log.Error, BuildOutput(outputsByName, runLog), runLog);
+                return new WorkflowRunResult(false, log.Error, BuildOutput(outputsByName, runLog, captureData), runLog);
             }
         }
 
-        return new WorkflowRunResult(true, null, BuildOutput(outputsByName, runLog), runLog);
+        return new WorkflowRunResult(true, null, BuildOutput(outputsByName, runLog, captureData), runLog);
     }
 
     public async Task<IReadOnlyList<NodeParameterOption>> LoadOptionsAsync(
         JsonElement definition,
         string nodeId,
         string parameterKey,
+        string? actorOwnerId = null,
         CancellationToken cancellationToken = default)
     {
         var nodes = ParseNodes(definition);
@@ -354,7 +359,7 @@ public sealed class WorkflowExecutionEngine(
             target.Type, target.Name, target.Parameters,
             input.Count > 0 ? input : [NodeItem.Empty()],
             outputsByName, new JsonObject(), runIndex: 0, evaluator, services,
-            _ => { }, cancellationToken);
+            _ => { }, cancellationToken, workflowId: null, actorOwnerId: actorOwnerId);
 
         return await provider.LoadOptionsAsync(context, parameterKey);
     }
@@ -504,7 +509,9 @@ public sealed class WorkflowExecutionEngine(
         IReadOnlyDictionary<string, IReadOnlyList<NodeItem>> outputsByName,
         JsonObject trigger,
         CancellationToken cancellationToken,
-        Guid? workflowId)
+        Guid? workflowId,
+        string? actorOwnerId,
+        bool captureData)
     {
         var startedAt = DateTimeOffset.UtcNow;
         var nodeType = registry.Find(node.Type);
@@ -515,13 +522,14 @@ public sealed class WorkflowExecutionEngine(
             logger.LogInformation("Node tipi '{Type}' icin executor yok; giris cikisa gecildi.", node.Type);
             var passthrough = (IReadOnlyList<IReadOnlyList<NodeItem>>)[input];
             return (new NodeRunData(node.Id, node.Name, node.Type, NodeRunStatus.Skipped,
-                ToJson(input), "Executor yok (placeholder).", startedAt, DateTimeOffset.UtcNow, input.Count), passthrough);
+                captureData ? ToJson(input) : new JsonArray(), "Executor yok (placeholder).",
+                startedAt, DateTimeOffset.UtcNow, input.Count), passthrough);
         }
 
         var logMessages = new List<string>();
         var context = new NodeExecutionContext(
             node.Type, node.Name, node.Parameters, input, outputsByName, trigger,
-            runIndex: 0, evaluator, services, logMessages.Add, cancellationToken, workflowId);
+            runIndex: 0, evaluator, services, logMessages.Add, cancellationToken, workflowId, actorOwnerId);
 
         try
         {
@@ -534,7 +542,7 @@ public sealed class WorkflowExecutionEngine(
 
             var primary = result.Outputs.Count > 0 ? result.Outputs[0] : [];
             return (new NodeRunData(node.Id, node.Name, node.Type, NodeRunStatus.Succeeded,
-                ToJson(primary), null, startedAt, DateTimeOffset.UtcNow, primary.Count), result.Outputs);
+                captureData ? ToJson(primary) : new JsonArray(), null, startedAt, DateTimeOffset.UtcNow, primary.Count), result.Outputs);
         }
         catch (OperationCanceledException)
         {
@@ -567,8 +575,16 @@ public sealed class WorkflowExecutionEngine(
 
     private static JsonNode BuildOutput(
         IReadOnlyDictionary<string, IReadOnlyList<NodeItem>> outputsByName,
-        IReadOnlyList<NodeRunData> runLog)
+        IReadOnlyList<NodeRunData> runLog,
+        bool captureData)
     {
+        // captureData=false: agir veriyi klonlama; yalniz iskeleti dondur (downstream akis
+        // outputsByName referanslarini kullanir, bu sonuctan etkilenmez).
+        if (!captureData)
+        {
+            return new JsonObject { ["main"] = new JsonArray(), ["nodes"] = new JsonObject() };
+        }
+
         var byNode = new JsonObject();
         foreach (var pair in outputsByName)
         {

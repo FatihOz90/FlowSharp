@@ -44,61 +44,73 @@
                 }
             </MudPaper>
         }
+        else if (isAdmin)
+        {
+            @if (MineWorkflows.Any())
+            {
+                <MudText Typo="Typo.subtitle1" Class="mb-2">@L["workflows.section.mine"]</MudText>
+                @WorkflowTable(MineWorkflows, showOwner: false)
+            }
+            @if (OtherWorkflows.Any())
+            {
+                <MudText Typo="Typo.subtitle1" Class="mt-6 mb-2">@L["workflows.section.others"]</MudText>
+                @WorkflowTable(OtherWorkflows, showOwner: true)
+            }
+        }
         else
         {
-            <MudGrid Spacing="3">
-                @foreach (var wf in workflows)
-                {
-                    <MudItem xs="12" md="6" xl="4">
-                        <MudCard Class="Fsharp-card" Elevation="0">
-                            <MudCardContent>
-                                <MudStack Spacing="2">
-                                    <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween">
-                                        <MudText Typo="Typo.h6">@wf.Name</MudText>
-                                        <MudChip T="string" Size="Size.Small" Color="@(wf.IsActive ? Color.Success : Color.Default)">
-                                            @(wf.IsActive ? L["workflows.status.active"] : L["workflows.status.inactive"])
-                                        </MudChip>
-                                    </MudStack>
-                                    <MudText Typo="Typo.body2" Color="Color.Secondary">@(string.IsNullOrWhiteSpace(wf.Description) ? L["workflows.no_description"] : wf.Description)</MudText>
-                                    <MudText Typo="Typo.caption" Color="Color.Secondary">v@(wf.Version)</MudText>
-                                </MudStack>
-                            </MudCardContent>
-                            <MudCardActions>
-                                @if (canWrite)
-                                {
-                                    <MudButton Href="@($"workflows/designer/{wf.Id}")" Variant="Variant.Text" StartIcon="@Icons.Material.Filled.Edit">@L["common.edit"]</MudButton>
-                                }
-                                @if (canExecute)
-                                {
-                                    <MudButton Variant="Variant.Text" Color="Color.Success"
-                                               StartIcon="@(runningId == wf.Id ? null : Icons.Material.Filled.PlayArrow)"
-                                               Disabled="@(runningId == wf.Id)" OnClick="() => RunAsync(wf.Id)">
-                                        @if (runningId == wf.Id)
-                                        {
-                                            <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" />
-                                            <span>Çalıştırılıyor…</span>
-                                        }
-                                        else
-                                        {
-                                            @L["common.run"]
-                                        }
-                                    </MudButton>
-                                }
-                                <MudSpacer />
-                                @if (canWrite)
-                                {
-                                    <MudIconButton Icon="@Icons.Material.Filled.Delete" Color="Color.Error" OnClick="() => DeleteAsync(wf.Id)" />
-                                }
-                            </MudCardActions>
-                        </MudCard>
-                    </MudItem>
-                }
-            </MudGrid>
-        }
-
-        @if (!string.IsNullOrWhiteSpace(message))
-        {
-            <MudAlert Severity="Severity.Info" Variant="Variant.Filled">@message</MudAlert>
+            @WorkflowTable(workflows, showOwner: false)
         }
     </MudStack>
 </MudContainer>
+
+@code {
+    private RenderFragment WorkflowTable(IEnumerable<Workflow> items, bool showOwner) =>
+        @<MudTable Items="items" Hover="true" Elevation="0" Class="Fsharp-surface" Breakpoint="Breakpoint.Sm">
+            <HeaderContent>
+                <MudTh>@L["nav.workflows"]</MudTh>
+                <MudTh>@L["workflows.status.active"]</MudTh>
+                <MudTh>v</MudTh>
+                @if (showOwner)
+                {
+                    <MudTh>@L["common.owner"]</MudTh>
+                }
+                <MudTh Style="text-align:right">@L["common.edit"]</MudTh>
+            </HeaderContent>
+            <RowTemplate>
+                <MudTd DataLabel="@L["nav.workflows"]">
+                    <MudText Typo="Typo.body1">@context.Name</MudText>
+                    <MudText Typo="Typo.caption" Color="Color.Secondary">@(string.IsNullOrWhiteSpace(context.Description) ? L["workflows.no_description"] : context.Description)</MudText>
+                </MudTd>
+                <MudTd DataLabel="@L["workflows.status.active"]">
+                    <MudChip T="string" Size="Size.Small" Color="@(context.IsActive ? Color.Success : Color.Default)">
+                        @(context.IsActive ? L["workflows.status.active"] : L["workflows.status.inactive"])
+                    </MudChip>
+                </MudTd>
+                <MudTd DataLabel="v">v@(context.Version)</MudTd>
+                @if (showOwner)
+                {
+                    <MudTd DataLabel="@L["common.owner"]">
+                        <MudText Typo="Typo.body2" Color="Color.Secondary">@OwnerLabel(context)</MudText>
+                    </MudTd>
+                }
+                <MudTd Style="text-align:right">
+                    @if (canWrite)
+                    {
+                        <MudIconButton Href="@($"workflows/designer/{context.Id}")" Icon="@Icons.Material.Filled.Edit" Title="@L["common.edit"]" Size="Size.Small" />
+                    }
+                    @if (canExecute)
+                    {
+                        <MudIconButton Color="Color.Success"
+                                       Icon="@Icons.Material.Filled.PlayArrow"
+                                       Title="@L["common.run"]" Size="Size.Small"
+                                       Disabled="@(runningId == context.Id)" OnClick="() => RunAsync(context.Id)" />
+                    }
+                    @if (canWrite)
+                    {
+                        <MudIconButton Icon="@Icons.Material.Filled.Delete" Color="Color.Error" Title="@L["common.delete"]" Size="Size.Small" OnClick="() => DeleteAsync(context.Id)" />
+                    }
+                </MudTd>
+            </RowTemplate>
+        </MudTable>;
+}

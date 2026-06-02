@@ -13,6 +13,10 @@
     <PackageReference Include="Serilog.Sinks.File" Version="7.0.0" />
     <ProjectReference Include="..\FlowSharp.Application\FlowSharp.Application.csproj" />
     <ProjectReference Include="..\FlowSharp.Infrastructure\FlowSharp.Infrastructure.csproj" />
+    <!-- Saglayiciya ozel migration assembly'leri: runtime'da aktif olan secilir (MigrationsAssembly). -->
+    <ProjectReference Include="..\FlowSharp.Migrations.Sqlite\FlowSharp.Migrations.Sqlite.csproj" />
+    <ProjectReference Include="..\FlowSharp.Migrations.Postgres\FlowSharp.Migrations.Postgres.csproj" />
+    <ProjectReference Include="..\FlowSharp.Migrations.SqlServer\FlowSharp.Migrations.SqlServer.csproj" />
   </ItemGroup>
 
   <ItemGroup>

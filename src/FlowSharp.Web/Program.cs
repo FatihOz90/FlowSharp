@@ -8,7 +8,6 @@ using FlowSharp.Infrastructure.Identity;
 using FlowSharp.Web.Components;
 using FlowSharp.Web.Components.Account;
 using FlowSharp.Web.Endpoints;
-using FlowSharp.Web.Hubs;
 using FlowSharp.Web.Localization;
 using Microsoft.AspNetCore.Localization;
 using Serilog;
@@ -29,8 +28,8 @@ builder.Host.UseSerilog((context, services, configuration) => configuration
 // Add services to the container.
 builder.Services.AddRazorComponents()
     .AddInteractiveServerComponents();
-builder.Services.AddSignalR();
 builder.Services.AddMudServices();
+builder.Services.AddScoped<FlowSharp.Web.Services.IUiNotifier, FlowSharp.Web.Services.UiNotifier>();
 
 // UI dili: lang/*.json. Desteklenen diller klasordeki dosyalardan turetilir.
 builder.Services.AddSingleton<ILocalizer, JsonLocalizer>();
@@ -69,7 +68,10 @@ builder.Services.AddDatabaseDeveloperPageExceptionFilter();
 
 builder.Services.AddIdentityCore<ApplicationUser>(options =>
     {
-        options.SignIn.RequireConfirmedAccount = true;
+        // true: kayit sonrasi e-posta onayi zorunlu (gercek SMTP gonderici devreye girer).
+        // false: e-posta dogrulamasi olmadan kayit aninda giris yapilir.
+        options.SignIn.RequireConfirmedAccount =
+            builder.Configuration.GetValue("Identity:RequireConfirmedAccount", true);
         options.Stores.SchemaVersion = IdentitySchemaVersions.Version3;
     })
     .AddRoles<IdentityRole>()
@@ -77,7 +79,7 @@ builder.Services.AddIdentityCore<ApplicationUser>(options =>
     .AddSignInManager()
     .AddDefaultTokenProviders();
 
-builder.Services.AddSingleton<IEmailSender<ApplicationUser>, IdentityNoOpEmailSender>();
+builder.Services.AddTransient<IEmailSender<ApplicationUser>, SmtpEmailSender>();
 
 var app = builder.Build();
 
@@ -115,7 +117,6 @@ app.UseAntiforgery();
 app.MapStaticAssets();
 app.MapRazorComponents<App>()
     .AddInteractiveServerRenderMode();
-app.MapHub<WorkflowEventsHub>("/hubs/workflows");
 app.MapWebhookEndpoints();
 
 // Dil degistirme: secilen dili cookie'ye yazar ve geri yonlendirir.
@@ -132,3 +133,6 @@ app.MapGet("/set-culture", (string culture, string? redirectUri, HttpContext ctx
 app.MapAdditionalIdentityEndpoints();
 
 app.Run();
+
+// WebApplicationFactory'nin (entegrasyon testleri) generic argumani icin erisilebilir Program tipi.
+public partial class Program;

@@ -31,7 +31,11 @@ public partial class WorkflowDesigner : IAsyncDisposable
     [Inject] public IWorkflowExecutionTracker Tracker { get; set; } = default!;
     [Inject] public IWorkflowEventPublisher EventPublisher { get; set; } = default!;
     [Inject] public FlowSharp.Application.Nodes.Expressions.IExpressionEvaluator Evaluator { get; set; } = default!;
+    [Inject] public Microsoft.AspNetCore.Components.Authorization.AuthenticationStateProvider AuthenticationStateProvider { get; set; } = default!;
     // Not: Node adi/aciklamasi NodeCatalog tarafindan zaten yerellestirilir; ayrica helper gerekmez.
+
+    private string? currentUserId;
+    private bool isAdmin;
 
     [Parameter] public Guid? WorkflowId { get; set; }
     [Parameter] public Guid? ExecutionId { get; set; }
@@ -99,8 +103,10 @@ public partial class WorkflowDesigner : IAsyncDisposable
 
     protected override async Task OnInitializedAsync()
     {
-        availableCredentials = await CredentialStore.ListAsync();
-        
+        (currentUserId, isAdmin) = await FlowSharp.Web.Security.CurrentUser.ResolveAsync(AuthenticationStateProvider);
+        // Dropdown yalniz oturum sahibinin credential'larini gosterir (cross-tenant isim sizmasi yok).
+        availableCredentials = await CredentialStore.ListAsync(currentUserId);
+
         if (!IsReadOnly)
         {
             Tracker.OnNodeCompleted += HandleExternalNodeCompleted;
@@ -109,6 +115,14 @@ public partial class WorkflowDesigner : IAsyncDisposable
         if (WorkflowId is null) return;
         workflow = await DbContext.Workflows.FirstOrDefaultAsync(w => w.Id == WorkflowId);
         if (workflow is null) return;
+
+        // Sahiplik: baskasinin workflow'unu acmaya calisan kullaniciyi listeye geri yonlendir.
+        if (!isAdmin && workflow.OwnerId != currentUserId)
+        {
+            workflow = null;
+            Navigation.NavigateTo("workflows");
+            return;
+        }
         workflowName = workflow.Name;
         description = workflow.Description;
         isActive = workflow.IsActive;
@@ -122,7 +136,9 @@ public partial class WorkflowDesigner : IAsyncDisposable
 
     private async Task LoadExecutionHistoryAsync(Guid executionId)
     {
-        var exec = await DbContext.WorkflowExecutions.AsNoTracking().FirstOrDefaultAsync(e => e.Id == executionId);
+        // Yalniz bu workflow'a ait execution yuklenebilir (baska workflow'un cikti gecmisine erisimi engeller).
+        var exec = await DbContext.WorkflowExecutions.AsNoTracking()
+            .FirstOrDefaultAsync(e => e.Id == executionId && e.WorkflowId == WorkflowId);
         if (exec is null) return;
 
         runOutputs.Clear();
@@ -469,7 +485,7 @@ public partial class WorkflowDesigner : IAsyncDisposable
         var definition = BuildDefinition();
         if (workflow is null)
         {
-            workflow = new Workflow { Name = workflowName, Description = description, IsActive = isActive, Definition = definition };
+            workflow = new Workflow { Name = workflowName, Description = description, IsActive = isActive, Definition = definition, OwnerId = currentUserId };
             DbContext.Workflows.Add(workflow);
         }
         else
@@ -499,6 +515,7 @@ public partial class WorkflowDesigner : IAsyncDisposable
             var options = new WorkflowExecutionOptions
             {
                 WorkflowId = WorkflowId,
+                ActorOwnerId = currentUserId,
                 OnNodeCompleted = async data =>
                 {
                     var node = nodes.FirstOrDefault(n => n.InstanceId == data.NodeId);
@@ -698,7 +715,7 @@ public partial class WorkflowDesigner : IAsyncDisposable
         try
         {
             using var doc = BuildDefinition();
-            var options = await Engine.LoadOptionsAsync(doc.RootElement, node.InstanceId, parameterKey);
+            var options = await Engine.LoadOptionsAsync(doc.RootElement, node.InstanceId, parameterKey, currentUserId);
             dynOptions[parameterKey] = options.ToList();
             if (options.Count == 0)
             {
@@ -882,9 +899,10 @@ public partial class WorkflowDesigner : IAsyncDisposable
         if (string.IsNullOrWhiteSpace(credAddName)) { await ShowToast("Credential adi gerekli.", true); return; }
         var type = def.CredentialKeys.FirstOrDefault() ?? "generic";
         var data = credAddFields.Where(f => !string.IsNullOrWhiteSpace(f.Key)).ToDictionary(f => f.Key, f => f.Value ?? "");
-        await CredentialStore.SaveAsync(new CredentialInput(null, credAddName, type, data));
-        availableCredentials = await CredentialStore.ListAsync();
-        if (openNode is not null) SetParam(openNode, paramKey, credAddName);
+        // Olusturulan credential oturum sahibine ait olur; node'a Id ile referans verilir.
+        var newId = await CredentialStore.SaveAsync(new CredentialInput(null, credAddName, type, data, currentUserId));
+        availableCredentials = await CredentialStore.ListAsync(currentUserId);
+        if (openNode is not null) SetParam(openNode, paramKey, newId.ToString());
         credAddOpen = false;
     }
 
@@ -915,6 +933,7 @@ public partial class WorkflowDesigner : IAsyncDisposable
             var options = new WorkflowExecutionOptions
             {
                 WorkflowId = WorkflowId,
+                ActorOwnerId = currentUserId,
                 OnTextDelta = chatStreamEnabled
                     ? async delta =>
                     {

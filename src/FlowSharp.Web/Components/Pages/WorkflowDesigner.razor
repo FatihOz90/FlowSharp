@@ -389,7 +389,7 @@
                                         <option value="">— @L["designer.ndv.select_credential"] —</option>
                                         @foreach (var c in CredentialsFor(def))
                                         {
-                                            <option value="@c.Name">@c.Name (@c.Type)</option>
+                                            <option value="@c.Id">@c.Name (@c.Type)</option>
                                         }
                                     </select>
                                     @if (!IsReadOnly)

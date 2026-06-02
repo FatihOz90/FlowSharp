@@ -7,4 +7,9 @@
     <Project Path="src/FlowSharp.Web/FlowSharp.Web.csproj" />
     <Project Path="src/FlowSharp.Worker/FlowSharp.Worker.csproj" />
   </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/FlowSharp.Tests/FlowSharp.Tests.csproj" />
+    <Project Path="tests/FlowSharp.Benchmarks/FlowSharp.Benchmarks.csproj" />
+    <Project Path="tests/FlowSharp.LoadTests/FlowSharp.LoadTests.csproj" />
+  </Folder>
 </Solution>

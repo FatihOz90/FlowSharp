@@ -1,0 +1,5 @@
+blank_issues_enabled: true
+contact_links:
+  - name: Security report / Güvenlik bildirimi
+    url: https://github.com/FlowSharp/FlowSharp/security/policy
+    about: Please report security vulnerabilities privately. / Güvenlik açıklarını lütfen özel olarak bildirin.

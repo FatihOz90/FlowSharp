@@ -25,6 +25,7 @@ public interface IWorkflowExecutionEngine
         JsonElement definition,
         string nodeId,
         string parameterKey,
+        string? actorOwnerId = null,
         CancellationToken cancellationToken = default);
 }
 
@@ -42,4 +43,17 @@ public sealed class WorkflowExecutionOptions
 
     /// <summary>Calisan workflow'un kimligi (RAG gibi workspace'e ozel kaynaklari izole etmek icin).</summary>
     public Guid? WorkflowId { get; init; }
+
+    /// <summary>Bu calismayi yetkilendiren sahibin (workflow owner / tetikleyen kullanici) Identity Id'si.
+    /// Credential cozumlemede sahiplik dogrulamasi icin kullanilir; yalniz ayni sahibe ait credential
+    /// cozulur. null = sistem/eski (yalniz sahipsiz credential'lar).</summary>
+    public string? ActorOwnerId { get; init; }
+
+    /// <summary>
+    /// <c>true</c> (varsayilan): node ciktilari <see cref="NodeRunData.Output"/> ve nihai sonuca
+    /// kopyalanir (webhook yaniti, designer canli izleme, kalici kayit icin gerekli).
+    /// <c>false</c>: yalniz metadata tutulur, agir DeepClone'lar atlanir; veri AKISI etkilenmez.
+    /// Kuyruk-worker + SaveData=None gibi ciktinin okunmadigi yollarda kullanilir.
+    /// </summary>
+    public bool CaptureData { get; init; } = true;
 }

@@ -8,6 +8,7 @@ FlowSharp is a workflow automation platform. Some features intentionally execute
 
 - Set `Security:CredentialEncryptionKey` for both Web and Worker.
 - Change the seeded admin password after first login, or override `Seed:Admin`.
+- For public sign-up, configure SMTP (`Email`) and set `Identity:RequireConfirmedAccount = true`; otherwise disable self-registration.
 - Use `HttpNodes:Exposure = "Public"` when the instance accepts untrusted users or public workflow/webhook input.
 - Keep `HttpNodes:Exposure = "Local"` when workflows must call localhost or private network services.
 - Install plugins only from repositories you trust.
@@ -122,6 +123,30 @@ Seed__Enabled=true
 Seed__Admin__Email=admin@example.local
 Seed__Admin__Password=<temporary-strong-password>
 ```
+
+### `Identity` and `Email`
+
+`Identity:RequireConfirmedAccount` controls whether new accounts must verify their email before sign-in. `false` allows immediate sign-in; `true` requires a confirmation email and therefore a working SMTP configuration. Self-registered users receive the `Member` role and an isolated workspace.
+
+```jsonc
+"Identity": { "RequireConfirmedAccount": true },
+"Email": {
+  "Host": "smtp.example.com",
+  "Port": 587,
+  "EnableSsl": true,
+  "User": "no-reply@example.com",
+  "Password": "<smtp-password>",
+  "From": "no-reply@example.com",
+  "FromName": "FlowSharp"
+}
+```
+
+Recommendations:
+
+- If `Email:Host` is empty, no email is sent and the confirmation link is written to the application log only — acceptable for local development, not for production.
+- For public deployments, configure SMTP, set `RequireConfirmedAccount` to `true`, and apply reverse-proxy rate limiting to the registration and login endpoints.
+- Supply `Email:Password` through a secret or environment variable (`Email__Password`), never in committed configuration.
+- If self-service sign-up is undesirable, disable the registration path or use an invite-based process.
 
 ### `HttpNodes`
 
@@ -340,12 +365,13 @@ Recommendations:
 
 ## Roles and Permissions
 
-FlowSharp seeds three roles:
+FlowSharp seeds four roles:
 
 | Role | Intended access |
 | --- | --- |
-| Admin | Full access, including plugin management. |
+| Admin | Full access, including credential and plugin management. |
 | Editor | Workflow read/write/execute and execution read. |
+| Member | Default role for self-registered users; same as Editor. |
 | Viewer | Workflow read and execution read. |
 
 Permission names:
@@ -356,13 +382,28 @@ Permission names:
 | `workflows.write` | Create, edit, and delete workflows. |
 | `workflows.execute` | Run workflows. |
 | `executions.read` | View execution history. |
+| `credentials.manage` | Create, edit, delete, and view stored credentials (Admin only). |
 | `plugins.manage` | Install, reload, and remove plugins. |
 
 Important notes:
 
 - `plugins.manage` is highly privileged because plugins run trusted server-side code.
+- `credentials.manage` is highly privileged because it exposes decrypted credential values; it is granted to Admin only.
 - `workflows.write` is powerful because workflows can call external services, database nodes, code nodes, and AI tools.
 - `workflows.execute` is powerful when existing workflows contain sensitive credentials or side effects.
+
+### Data isolation
+
+Workflows and credentials are owned by the user who creates them. Non-administrators see and operate on only their own records; credentials resolve at execution time only when the credential owner matches the workflow owner, preventing cross-tenant secret access. Admin is exempt from ownership filtering.
+
+### Self-registration and email confirmation
+
+Users who sign up are automatically assigned the `Member` role and operate within an isolated workspace. Account confirmation is controlled by `Identity:RequireConfirmedAccount`:
+
+- `false`: users sign in immediately after registering (no email verification).
+- `true`: a confirmation email must be acknowledged before sign-in; this requires a working SMTP configuration (`Email` section).
+
+For public deployments, configure SMTP and consider requiring confirmation, and place registration and login endpoints behind reverse-proxy rate limiting. If self-registration is not desired, disable the registration path or operate an invite-based process.
 
 ## Node-Specific Security Notes
 

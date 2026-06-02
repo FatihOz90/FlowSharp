@@ -87,6 +87,9 @@
 
         Logger.LogInformation("User created a new account with password.");
 
+        // Self-registration ile gelen kullaniciya varsayilan Member rolu: kendi workflow'larini yonetebilir.
+        await UserManager.AddToRoleAsync(user, IdentitySeeder.MemberRole);
+
         var userId = await UserManager.GetUserIdAsync(user);
         var code = await UserManager.GenerateEmailConfirmationTokenAsync(user);
         code = WebEncoders.Base64UrlEncode(Encoding.UTF8.GetBytes(code));

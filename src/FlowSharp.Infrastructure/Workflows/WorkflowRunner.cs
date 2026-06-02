@@ -31,7 +31,10 @@ public sealed class WorkflowRunner(
         job.ExecutionId = execution.Id;
         await dbContext.SaveChangesAsync(cancellationToken);
 
-        var result = await ExecuteAndSaveAsync(workflow, execution, job.Payload, cancellationToken);
+        // Kuyruk-worker yolu: arka plan, cagirana yanit dondurmez. SaveData=None ise agir veriyi
+        // hic yakalamayiz (motor DeepClone'lari atlar -> yuksek throughput, dusuk bellek).
+        var captureData = !string.Equals(executionSettings.SaveData, "none", StringComparison.OrdinalIgnoreCase);
+        var result = await ExecuteAndSaveAsync(workflow, execution, job.Payload, captureData, cancellationToken);
         if (!result.Succeeded)
         {
             throw new InvalidOperationException(result.Error ?? "Workflow calismasi basarisiz.");
@@ -42,7 +45,8 @@ public sealed class WorkflowRunner(
     {
         var (workflow, execution) = await PrepareExecutionAsync(workflowId, payload, cancellationToken);
         await dbContext.SaveChangesAsync(cancellationToken);
-        return await ExecuteAndSaveAsync(workflow, execution, payload, cancellationToken);
+        // Senkron (webhook) yol: cagirana cikti/Respond node yaniti dondurulur; veri her zaman yakalanir.
+        return await ExecuteAndSaveAsync(workflow, execution, payload, captureData: true, cancellationToken);
     }
 
     private async Task<(Workflow Workflow, WorkflowExecution Execution)> PrepareExecutionAsync(
@@ -64,11 +68,14 @@ public sealed class WorkflowRunner(
     }
 
     private async Task<WorkflowRunResult> ExecuteAndSaveAsync(
-        Workflow workflow, WorkflowExecution execution, JsonDocument payload, CancellationToken cancellationToken)
+        Workflow workflow, WorkflowExecution execution, JsonDocument payload, bool captureData, CancellationToken cancellationToken)
     {
         var options = new WorkflowExecutionOptions
         {
             WorkflowId = workflow.Id,
+            // Calisma workflow sahibinin yetkisiyle yurur: yalniz onun credential'lari cozulebilir.
+            ActorOwnerId = workflow.OwnerId,
+            CaptureData = captureData,
             OnNodeCompleted = async data =>
             {
                 await eventPublisher.PublishNodeCompletedAsync(workflow.Id, execution.Id, data);

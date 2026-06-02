@@ -17,10 +17,15 @@ public static class IdentitySeeder
     public const string EditorRole = "Editor";
     public const string ViewerRole = "Viewer";
 
+    /// <summary>Self-registration ile kayit olan kullanicilara otomatik atanan rol.
+    /// Kendi workflow'larini olusturup calistirabilir; baskasinin kayitlarini goremez (sahiplik filtresi).</summary>
+    public const string MemberRole = "Member";
+
     private static readonly Dictionary<string, string[]> RolePermissions = new()
     {
         [AdminRole] = AppPermissions.All,
         [EditorRole] = [AppPermissions.WorkflowsRead, AppPermissions.WorkflowsWrite, AppPermissions.WorkflowsExecute, AppPermissions.ExecutionsRead],
+        [MemberRole] = [AppPermissions.WorkflowsRead, AppPermissions.WorkflowsWrite, AppPermissions.WorkflowsExecute, AppPermissions.ExecutionsRead],
         [ViewerRole] = [AppPermissions.WorkflowsRead, AppPermissions.ExecutionsRead]
     };
 
