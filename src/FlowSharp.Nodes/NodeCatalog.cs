@@ -31,6 +31,17 @@ public sealed class NodeCatalog(INodeRegistry registry, INodeTranslationStore tr
         return def is null ? null : Localize(def);
     }
 
+    public IReadOnlyList<NodePort> ResolveOutputs(string key, IReadOnlyDictionary<string, string> parameters)
+    {
+        if (registry.Find(key) is IHasDynamicOutputs dynamic)
+        {
+            return dynamic.GetOutputs(parameters);
+        }
+
+        var def = registry.Definitions.FirstOrDefault(node => node.Key.Equals(key, StringComparison.OrdinalIgnoreCase));
+        return def?.OutputPorts ?? [NodePort.Main];
+    }
+
     private NodeDefinition Localize(NodeDefinition def)
     {
         var culture = CultureInfo.CurrentUICulture.TwoLetterISOLanguageName;

@@ -90,7 +90,7 @@ public sealed class WebhookRegistrar(ApplicationDbContext dbContext) : IWebhookR
                 && string.Equals(nameEl.GetString(), nodeName, StringComparison.Ordinal))
             {
                 var parameters = node.TryGetProperty("parameters", out var paramEl) ? paramEl : default;
-                return ReadParam(parameters, "event");
+                return ReadParam(parameters, "events");
             }
         }
 

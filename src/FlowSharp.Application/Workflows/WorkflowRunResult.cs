@@ -19,7 +19,10 @@ public sealed record NodeRunData(
     string? Error,
     DateTimeOffset StartedAt,
     DateTimeOffset FinishedAt,
-    int ItemCount);
+    int ItemCount,
+    // Cok-cikisli node'larda (orn. dinamik portlu trigger) her portun ciktisi; editorde dal-bazli
+    // (port-aware) girdi onizlemesi icin. Tek cikisli node'larda null (Output zaten port 0'dir).
+    IReadOnlyList<JsonNode>? PortOutputs = null);
 
 public enum NodeRunStatus
 {

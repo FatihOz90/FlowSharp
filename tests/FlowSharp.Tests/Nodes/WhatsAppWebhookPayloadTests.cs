@@ -106,9 +106,10 @@ public class WhatsAppWebhookPayloadTests
     }
 
     [Fact]
-    public void All_filter_always_triggers()
+    public void Both_events_selected_triggers_on_either()
     {
-        WhatsAppWebhookPayload.ShouldTrigger(Payload("whatsapp", messages: 0, statuses: 1), "all").Should().BeTrue();
+        WhatsAppWebhookPayload.ShouldTrigger(Payload("whatsapp", messages: 0, statuses: 1), "messages,statuses").Should().BeTrue();
+        WhatsAppWebhookPayload.ShouldTrigger(Payload("whatsapp", messages: 1, statuses: 0), "messages,statuses").Should().BeTrue();
     }
 
     [Fact]

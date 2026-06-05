@@ -67,6 +67,9 @@ public partial class WorkflowDesigner : IAsyncDisposable
     private readonly List<DesignerNode> nodes = [];
     private readonly List<DesignerConnection> connections = [];
     private readonly Dictionary<string, RunOutput> runOutputs = new();
+    // Cok-cikisli node'larin port-bazli son ciktilari (nodeId -> port indeksi -> JSON). Editorde
+    // her dalin kendi portunun verisini gostermek icin (port-aware girdi onizlemesi).
+    private readonly Dictionary<string, Dictionary<int, string>> runPortOutputs = new();
 
     private string? selectedId;
     private string? openNodeId;
@@ -146,6 +149,7 @@ public partial class WorkflowDesigner : IAsyncDisposable
         if (exec is null) return;
 
         runOutputs.Clear();
+        runPortOutputs.Clear();
         if (exec.Output is not null)
         {
             try
@@ -190,7 +194,7 @@ public partial class WorkflowDesigner : IAsyncDisposable
             {
                 var node = nodes.FirstOrDefault(n => n.InstanceId == data.NodeId);
                 if (node is not null) node.Status = data.Status.ToString();
-                runOutputs[data.NodeId] = ToRunOutput(data);
+                StoreRunOutput(data);
                 StateHasChanged();
                 await SyncGraphAsync();
             });
@@ -434,53 +438,30 @@ public partial class WorkflowDesigner : IAsyncDisposable
     private void SetParam(DesignerNode node, string key, string? value) =>
         node.Parameters[key] = value ?? string.Empty;
 
+    /// <summary>MultiSelect CSV degerini secili oge kumesine cevirir.</summary>
+    private static HashSet<string> MultiSelectValues(string? csv) =>
+        (csv ?? string.Empty)
+            .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
     /// <summary>
-    /// Bir cikis portunun canvas'ta gosterilecek etiketi. Switch icin etiket statik "Output N"
-    /// yerine kurallardan turetilir: kuraldaki opsiyonel "label", yoksa eslesen "value". Boylece
-    /// kullanici cikislari kural degerleriyle (orn. "delivered") anlamlandirabilir.
+    /// MultiSelect'te bir secenegi acar/kapatir ve CSV'yi <paramref name="options"/> sirasinda saklar.
+    /// Boylece dinamik cikis port siralamasi kararli kalir.
     /// </summary>
-    private string OutputPortLabel(DesignerNode node, NodePort port)
+    private void ToggleMultiSelect(DesignerNode node, string key, IReadOnlyList<string> options, string option, bool selected)
     {
-        if (!node.NodeKey.Equals("switch.condition", StringComparison.OrdinalIgnoreCase)
-            || !int.TryParse(port.Name, out var portIndex))
+        var current = MultiSelectValues(GetParam(node, key));
+        if (selected)
         {
-            return port.Label; // Switch disi node'lar ve Fallback portu: varsayilan etiket.
+            current.Add(option);
+        }
+        else
+        {
+            current.Remove(option);
         }
 
-        try
-        {
-            var raw = GetParam(node, "rules");
-            if (string.IsNullOrWhiteSpace(raw)
-                || System.Text.Json.Nodes.JsonNode.Parse(raw) is not System.Text.Json.Nodes.JsonArray rules)
-            {
-                return port.Label;
-            }
-
-            foreach (var rule in rules.OfType<System.Text.Json.Nodes.JsonObject>())
-            {
-                var output = rule.TryGetPropertyValue("output", out var o) && o is not null
-                    && int.TryParse(o.ToString(), out var parsed) ? parsed : 0;
-                if (output != portIndex)
-                {
-                    continue;
-                }
-
-                var label = rule.TryGetPropertyValue("label", out var l) ? l?.ToString() : null;
-                if (!string.IsNullOrWhiteSpace(label))
-                {
-                    return label;
-                }
-
-                var value = rule.TryGetPropertyValue("value", out var v) ? v?.ToString() : null;
-                return string.IsNullOrWhiteSpace(value) ? port.Label : value;
-            }
-        }
-        catch (System.Text.Json.JsonException)
-        {
-            // Gecersiz JSON: varsayilan etikete dus.
-        }
-
-        return port.Label;
+        SetParam(node, key, string.Join(",", options.Where(current.Contains)));
+        StateHasChanged(); // Cikis portlari degisebilir; canvas'i yeniden ciz.
     }
 
     /// <summary>Webhook node'unun tam cagri adresi: {base}/webhook/{workflowKey}/{path}.</summary>
@@ -566,6 +547,7 @@ public partial class WorkflowDesigner : IAsyncDisposable
     // ---------- Save / Execute ----------
     private async Task SaveAsync()
     {
+        NormalizeJsonParameters(); // JSON alanlarini kaydederken okunabilir hale getir (beautify).
         var definition = BuildDefinition();
         if (workflow is null)
         {
@@ -598,6 +580,7 @@ public partial class WorkflowDesigner : IAsyncDisposable
         running = true;
         foreach (var n in nodes) n.Status = "";
         runOutputs.Clear();
+        runPortOutputs.Clear();
         StateHasChanged();
 
         try
@@ -611,7 +594,7 @@ public partial class WorkflowDesigner : IAsyncDisposable
                 {
                     var node = nodes.FirstOrDefault(n => n.InstanceId == data.NodeId);
                     if (node is not null) node.Status = data.Status.ToString();
-                    runOutputs[data.NodeId] = ToRunOutput(data);
+                    StoreRunOutput(data);
                     await InvokeAsync(StateHasChanged);
                     await SyncGraphAsync();
 
@@ -639,6 +622,67 @@ public partial class WorkflowDesigner : IAsyncDisposable
     }
 
     private RunOutput? NodeOutput(string id) => runOutputs.TryGetValue(id, out var o) ? o : null;
+
+    /// <summary>
+    /// Bir node'un calisma ciktisini editor onizlemesi icin saklar. Cok-cikisli trigger'larda bir
+    /// olay (orn. WhatsApp status) ilgili portu bos calistirir; bu bos sonuc, onceki dolu ornegin
+    /// (orn. son gelen mesaj) uzerine YAZMAZ. Boylece ifade kurarken hep son anlamli veri gorunur
+    /// (n8n'in "son veriyi tut" davranisi). Hata sonuclari her zaman yazilir.
+    /// </summary>
+    private void StoreRunOutput(NodeRunData data)
+    {
+        var output = ToRunOutput(data);
+        if (output.ItemCount == 0 && output.Error is null
+            && runOutputs.TryGetValue(data.NodeId, out var existing)
+            && existing is { ItemCount: > 0, Error: null })
+        {
+            // Onceki dolu ornegi koru (port 0). Yine de dolu portlari guncelle (asagida).
+        }
+        else
+        {
+            runOutputs[data.NodeId] = output;
+        }
+
+        // Cok-cikisli node: her portu ayri sakla; bos port onceki dolu ornegin uzerine yazmaz.
+        if (data.PortOutputs is { Count: > 0 })
+        {
+            var ports = runPortOutputs.TryGetValue(data.NodeId, out var existingPorts) ? existingPorts : new();
+            for (var i = 0; i < data.PortOutputs.Count; i++)
+            {
+                var json = data.PortOutputs[i];
+                var isEmpty = json is JsonArray { Count: 0 } or null;
+                if (isEmpty && ports.ContainsKey(i))
+                {
+                    continue; // Bu portun onceki dolu ornegini koru.
+                }
+
+                ports[i] = json?.ToJsonString(DisplayJson) ?? "[]";
+            }
+
+            runPortOutputs[data.NodeId] = ports;
+        }
+    }
+
+    /// <summary>Tum node'lardaki Json tipli parametreleri tek helper'dan (JsonText) bicimler.</summary>
+    private void NormalizeJsonParameters()
+    {
+        foreach (var node in nodes)
+        {
+            var def = Definition(node.NodeKey);
+            if (def is null)
+            {
+                continue;
+            }
+
+            foreach (var p in def.Parameters.Where(p => p.Type == NodeParameterType.Json))
+            {
+                if (node.Parameters.TryGetValue(p.Key, out var value))
+                {
+                    node.Parameters[p.Key] = FlowSharp.Web.Services.JsonText.Beautify(value);
+                }
+            }
+        }
+    }
 
     private JsonDocument BuildDefinition()
     {
@@ -766,7 +810,7 @@ public partial class WorkflowDesigner : IAsyncDisposable
     // ---------- NDV input/output ----------
     private void CloseNdv() { openNodeId = null; credAddOpen = false; }
 
-    private DesignerNode? UpstreamNode(DesignerNode node)
+    private DesignerConnection? UpstreamConnection(DesignerNode node)
     {
         var incoming = connections.Where(c => c.ToId == node.InstanceId).ToList();
         if (incoming.Count == 0)
@@ -782,11 +826,37 @@ public partial class WorkflowDesigner : IAsyncDisposable
         bool IsMainInput(DesignerConnection c) =>
             def is null || c.ToPort >= def.InputPorts.Count || def.InputPorts[c.ToPort].Type == NodePortType.Main;
 
-        var conn = incoming.FirstOrDefault(IsMainInput) ?? incoming[0];
-        return nodes.FirstOrDefault(n => n.InstanceId == conn.FromId);
+        return incoming.FirstOrDefault(IsMainInput) ?? incoming[0];
+    }
+
+    private DesignerNode? UpstreamNode(DesignerNode node)
+    {
+        var conn = UpstreamConnection(node);
+        return conn is null ? null : nodes.FirstOrDefault(n => n.InstanceId == conn.FromId);
     }
 
     private string? UpstreamName(DesignerNode node) => UpstreamNode(node)?.Name;
+
+    /// <summary>
+    /// Bir node'un girdisini, bagli oldugu KAYNAK PORTUN son ciktisi olarak doner (port-aware).
+    /// Cok-cikisli upstream'lerde (orn. WhatsApp Trigger Messages/Statuses) dogru dalin verisini verir;
+    /// port-bazli veri yoksa port 0'a (genel cikti) duser.
+    /// </summary>
+    private string? UpstreamPortJson(DesignerNode node)
+    {
+        var conn = UpstreamConnection(node);
+        if (conn is null)
+        {
+            return null;
+        }
+
+        if (runPortOutputs.TryGetValue(conn.FromId, out var ports) && ports.TryGetValue(conn.FromPort, out var portJson))
+        {
+            return portJson;
+        }
+
+        return runOutputs.TryGetValue(conn.FromId, out var o) ? o.Json : null;
+    }
 
     // ---------- Dinamik parametre secenekleri (generic) ----------
     // Her parametre anahtari icin yuklenen secenekleri/durumu tutar (node'a ozel kod yok).
@@ -870,11 +940,7 @@ public partial class WorkflowDesigner : IAsyncDisposable
         return current is not null && cond.Values.Contains(current, StringComparer.OrdinalIgnoreCase);
     }
 
-    private string? UpstreamOutput(DesignerNode node)
-    {
-        var up = UpstreamNode(node);
-        return up is not null && runOutputs.TryGetValue(up.InstanceId, out var o) ? o.Json : null;
-    }
+    private string? UpstreamOutput(DesignerNode node) => UpstreamPortJson(node);
 
     // ---------- Canli expression (ifade) onizleme/dogrulama ----------
 
@@ -923,10 +989,12 @@ public partial class WorkflowDesigner : IAsyncDisposable
         }
 
         NodeItem? current = null;
-        var up = UpstreamNode(node);
-        if (up is not null && outputs.TryGetValue(up.Name, out var upItems) && upItems.Count > 0)
+        // $json, bagli olunan KAYNAK PORTUN verisinden gelir (port-aware). Boylece Statuses dalindaki
+        // bir node {{$json.status}}'u dogru onizler, port 0'daki (messages) veriyi degil.
+        var portItems = ParseItems(UpstreamPortJson(node));
+        if (portItems.Count > 0)
         {
-            current = upItems[0];
+            current = portItems[0];
         }
         else if (IsAgentMemoryNode(node))
         {
@@ -1046,6 +1114,7 @@ public partial class WorkflowDesigner : IAsyncDisposable
         chatBusy = true;
         foreach (var n in nodes) n.Status = "";
         runOutputs.Clear();
+        runPortOutputs.Clear();
         StateHasChanged();
 
         try
@@ -1071,7 +1140,7 @@ public partial class WorkflowDesigner : IAsyncDisposable
                 {
                     var node = nodes.FirstOrDefault(n => n.InstanceId == data.NodeId);
                     if (node is not null) node.Status = data.Status.ToString();
-                    runOutputs[data.NodeId] = ToRunOutput(data);
+                    StoreRunOutput(data);
                     await InvokeAsync(StateHasChanged);
                     await SyncGraphAsync();
 

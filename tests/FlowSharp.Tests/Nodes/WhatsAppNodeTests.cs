@@ -1,5 +1,6 @@
 using System.Text.Json.Nodes;
 using FluentAssertions;
+using FlowSharp.Application.Nodes;
 using FlowSharp.Domain.Nodes;
 using FlowSharp.Nodes.Communication.WhatsApp;
 using FlowSharp.Tests.Fixtures;
@@ -31,6 +32,74 @@ public class WhatsAppNodeTests
         node.Definition.Key.Should().Be("whatsapp.trigger");
         node.Definition.Kind.Should().Be(NodeKind.Trigger);
         node.Definition.Category.Should().Be(NodeCategory.Trigger);
+    }
+
+    [Theory]
+    [InlineData("messages,statuses", new[] { "messages", "statuses" })]
+    [InlineData("statuses", new[] { "statuses" })]
+    [InlineData("messages", new[] { "messages" })]
+    [InlineData("", new[] { "messages" })] // bos secim -> varsayilan tek port
+    [InlineData("statuses,messages", new[] { "messages", "statuses" })] // kanonik sira korunur
+    public void Trigger_outputs_one_port_per_selected_event(string events, string[] expectedPorts)
+    {
+        var node = new WhatsAppTriggerNode();
+        var ports = node.GetOutputs(new Dictionary<string, string> { ["events"] = events });
+        ports.Select(p => p.Name).Should().Equal(expectedPorts);
+    }
+
+    [Fact]
+    public async Task Trigger_routes_messages_and_statuses_to_separate_ports_per_item()
+    {
+        var node = new WhatsAppTriggerNode();
+        var payload = new JsonObject
+        {
+            ["source"] = "whatsapp",
+            ["whatsapp"] = new JsonObject
+            {
+                ["messages"] = new JsonArray
+                {
+                    new JsonObject { ["from"] = "9055", ["text"] = "selam" },
+                    new JsonObject { ["from"] = "9056", ["text"] = "merhaba" }
+                },
+                ["statuses"] = new JsonArray { new JsonObject { ["status"] = "delivered" } }
+            }
+        };
+        var ctx = new FakeNodeExecutionContext(
+            parameters: new JsonObject { ["events"] = "messages,statuses" },
+            items: [NodeItem.From(payload)]);
+
+        var result = await node.ExecuteAsync(ctx);
+
+        result.Outputs.Should().HaveCount(2);
+        // Port 0 = messages: item basina bir oge
+        result.Outputs[0].Should().HaveCount(2);
+        result.Outputs[0][0].Json["text"]!.GetValue<string>().Should().Be("selam");
+        // Port 1 = statuses
+        result.Outputs[1].Should().ContainSingle();
+        result.Outputs[1][0].Json["status"]!.GetValue<string>().Should().Be("delivered");
+    }
+
+    [Fact]
+    public async Task Trigger_leaves_messages_port_empty_for_status_only_event()
+    {
+        var node = new WhatsAppTriggerNode();
+        var payload = new JsonObject
+        {
+            ["source"] = "whatsapp",
+            ["whatsapp"] = new JsonObject
+            {
+                ["messages"] = new JsonArray(),
+                ["statuses"] = new JsonArray { new JsonObject { ["status"] = "read" } }
+            }
+        };
+        var ctx = new FakeNodeExecutionContext(
+            parameters: new JsonObject { ["events"] = "messages,statuses" },
+            items: [NodeItem.From(payload)]);
+
+        var result = await node.ExecuteAsync(ctx);
+
+        result.Outputs[0].Should().BeEmpty();   // messages portu bos -> downstream atlanir
+        result.Outputs[1].Should().ContainSingle();
     }
 
     [Fact]

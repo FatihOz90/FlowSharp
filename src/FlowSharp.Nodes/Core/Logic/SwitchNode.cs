@@ -1,4 +1,3 @@
-using System.Globalization;
 using System.Text.Json.Nodes;
 using FlowSharp.Application.Nodes;
 using FlowSharp.Domain.Nodes;
@@ -6,17 +5,15 @@ using FlowSharp.Domain.Nodes;
 namespace FlowSharp.Nodes.Core.Logic;
 
 /// <summary>
-/// Item'lari kurallara gore en fazla 4 cikisa yonlendirir. "rules" parametresi
-/// [{"value":"A","output":0}, ...] formatinda bir JSON dizisidir; value1 ile esit
-/// olan ilk kuralin output portuna gonderilir.
-/// Hicbir kurala uymayan item'lar ayri bir "fallback" cikisina gider (sessizce dusurulmez).
-/// Eslesip de gecersiz/aralik disi bir output tasiyan kural ise sessizce gizlenmez; node
-/// acik bir hata ile basarisiz olur (yapilandirma hatasi).
+/// Item'lari kurallara gore dallandirir. "rules" parametresi [{"value":"A","label":"opsiyonel"}, ...]
+/// formatinda bir JSON dizisidir. HER KURAL BIR CIKIS PORTU uretir (sirayla); kuraldaki "label"
+/// verilirse port o adla, yoksa "value" ile gosterilir (<see cref="IHasDynamicOutputs"/>). value1 ile
+/// esit olan ilk kuralin portuna gonderilir; hicbir kurala uymayan item'lar sondaki "Fallback" portuna gider.
 /// </summary>
-public sealed class SwitchNode : NodeType
+public sealed class SwitchNode : NodeType, IHasDynamicOutputs
 {
-    private const int OutputCount = 4;
-    private const int FallbackPort = OutputCount; // 4: eslesmeyen item'larin gittigi ayri cikis.
+    private const string RulesParam = "rules";
+    private const string DefaultRules = "[{\"value\":\"a\",\"label\":\"A\"},{\"value\":\"b\",\"label\":\"B\"}]";
 
     public override NodeDefinition Definition { get; } = new(
         Key: "switch.condition",
@@ -27,121 +24,84 @@ public sealed class SwitchNode : NodeType
         Parameters:
         [
             new NodeParameterDefinition("value1", "Value", NodeParameterType.String, IsRequired: true,
-                HelpText: "Ornek: {{$json.type}}"),
-            new NodeParameterDefinition("rules", "Rules (JSON)", NodeParameterType.Json,
-                DefaultValue: "[{\"value\":\"a\",\"output\":0},{\"value\":\"b\",\"output\":1}]",
-                HelpText: "Her kural {\"value\":\"...\",\"output\":0-3,\"label\":\"opsiyonel cikis adi\"}. 'label' verirsen cikis portu o adla, vermezsen 'value' ile gosterilir. Eslesmeyenler Fallback'e gider.")
+                HelpText: "Kurallarla karsilastirilacak deger. Ornek: {{$json.status}}"),
+            new NodeParameterDefinition(RulesParam, "Rules (JSON)", NodeParameterType.Json,
+                DefaultValue: DefaultRules,
+                HelpText: "Her kural bir cikis portu olur (sirayla). {\"value\":\"...\",\"label\":\"opsiyonel ad\"}. " +
+                          "label yoksa value gosterilir. Hicbirine uymayanlar Fallback'e gider.")
         ],
         Tags: ["core", "logic"],
         Icon: "bezier2",
         Color: "#408000",
-        Outputs:
-        [
-            NodePort.Named("0", "Output 0"),
-            NodePort.Named("1", "Output 1"),
-            NodePort.Named("2", "Output 2"),
-            NodePort.Named("3", "Output 3"),
-            NodePort.Named("fallback", "Fallback (eslesmeyen)")
-        ]);
+        // Statik varsayilan (katalog icin); gercek portlar GetOutputs ile instance'a gore uretilir.
+        Outputs: BuildPorts(ParseRules(DefaultRules)));
+
+    public IReadOnlyList<NodePort> GetOutputs(IReadOnlyDictionary<string, string> parameters) =>
+        BuildPorts(ParseRules(parameters.GetValueOrDefault(RulesParam)));
 
     public override Task<NodeExecutionResult> ExecuteAsync(INodeExecutionContext context)
     {
-        var outputs = new List<NodeItem>[OutputCount + 1];
+        var rules = ParseRules(context.GetString(RulesParam));
+        var fallbackPort = rules.Count; // Fallback her zaman son port.
+
+        var outputs = new List<NodeItem>[rules.Count + 1];
         for (var i = 0; i < outputs.Length; i++)
         {
             outputs[i] = [];
         }
 
         var items = context.Items.Count > 0 ? context.Items : [NodeItem.Empty()];
-
         for (var index = 0; index < items.Count; index++)
         {
             var value1 = context.GetString("value1", index) ?? string.Empty;
-            var route = Resolve(context.GetJson("rules", index), value1);
+            var matched = rules.FindIndex(rule =>
+                string.Equals(rule.Value, value1, StringComparison.OrdinalIgnoreCase));
 
-            switch (route.Kind)
-            {
-                case RouteKind.Matched:
-                    outputs[route.Port].Add(items[index]);
-                    break;
-                case RouteKind.Unmatched:
-                    outputs[FallbackPort].Add(items[index]);
-                    break;
-                case RouteKind.InvalidOutput:
-                    return Task.FromResult(NodeExecutionResult.Failure(
-                        $"Switch kuralinda gecersiz 'output': {route.RawOutput}. Gecerli bir port indeksi (0..{OutputCount - 1}) olmali."));
-            }
+            outputs[matched >= 0 ? matched : fallbackPort].Add(items[index]);
         }
 
         return Task.FromResult(NodeExecutionResult.Multi(outputs));
     }
 
-    private static Resolution Resolve(JsonNode? rules, string value1)
+    /// <summary>Kurallardan cikis portlarini uretir: her kural icin bir port + sonda Fallback.</summary>
+    private static IReadOnlyList<NodePort> BuildPorts(List<Rule> rules)
     {
-        if (rules is not JsonArray array)
+        var ports = rules
+            .Select((rule, i) => NodePort.Named(i.ToString(),
+                !string.IsNullOrWhiteSpace(rule.Label) ? rule.Label!
+                : !string.IsNullOrWhiteSpace(rule.Value) ? rule.Value!
+                : $"Output {i + 1}"))
+            .ToList();
+
+        ports.Add(NodePort.Named("fallback", "Fallback (eslesmeyen)"));
+        return ports;
+    }
+
+    private static List<Rule> ParseRules(string? raw)
+    {
+        if (string.IsNullOrWhiteSpace(raw))
         {
-            return Resolution.Unmatched;
+            return [];
         }
 
-        foreach (var rule in array.OfType<JsonObject>())
+        try
         {
-            var ruleValue = rule.TryGetPropertyValue("value", out var v) ? v?.ToString() : null;
-            if (!string.Equals(ruleValue, value1, StringComparison.OrdinalIgnoreCase))
+            if (JsonNode.Parse(raw) is JsonArray array)
             {
-                continue;
+                return array.OfType<JsonObject>()
+                    .Select(o => new Rule(
+                        o.TryGetPropertyValue("value", out var v) ? v?.ToString() : null,
+                        o.TryGetPropertyValue("label", out var l) ? l?.ToString() : null))
+                    .ToList();
             }
-
-            // Eslesen kural: "output" yoksa ilk cikis (0) varsayilir; varsa gecerli bir port olmali.
-            if (!rule.TryGetPropertyValue("output", out var o) || o is null)
-            {
-                return Resolution.Matched(0);
-            }
-
-            var port = ParseOutput(o);
-            return port is >= 0 and < OutputCount
-                ? Resolution.Matched(port.Value)
-                : Resolution.Invalid(o.ToJsonString());
         }
-
-        return Resolution.Unmatched;
-    }
-
-    /// <summary>
-    /// Kural "output" degerini port indeksine cevirir. Sayi olabilecegi gibi (JSON elle
-    /// duzenlendiginde veya form round-trip'inde) string ("1") de olabilir; ikisi de kabul edilir.
-    /// Cevrilemezse <c>null</c> doner (cagiran bunu yapilandirma hatasi olarak ele alir).
-    /// </summary>
-    private static int? ParseOutput(JsonNode? output)
-    {
-        if (output is not JsonValue value)
+        catch (System.Text.Json.JsonException)
         {
-            return null;
+            // Gecersiz JSON: kural yok kabul edilir (her sey Fallback'e gider).
         }
 
-        if (value.TryGetValue<int>(out var port))
-        {
-            return port;
-        }
-
-        return value.TryGetValue<string>(out var text) &&
-               int.TryParse(text, NumberStyles.Integer, CultureInfo.InvariantCulture, out var parsed)
-            ? parsed
-            : null;
+        return [];
     }
 
-    private enum RouteKind
-    {
-        Matched,
-        Unmatched,
-        InvalidOutput
-    }
-
-    private readonly record struct Resolution(RouteKind Kind, int Port, string? RawOutput)
-    {
-        public static readonly Resolution Unmatched = new(RouteKind.Unmatched, 0, null);
-
-        public static Resolution Matched(int port) => new(RouteKind.Matched, port, null);
-
-        public static Resolution Invalid(string raw) => new(RouteKind.InvalidOutput, 0, raw);
-    }
+    private readonly record struct Rule(string? Value, string? Label);
 }

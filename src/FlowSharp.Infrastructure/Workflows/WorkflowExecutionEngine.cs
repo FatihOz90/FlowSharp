@@ -552,8 +552,12 @@ public sealed class WorkflowExecutionEngine(
             }
 
             var primary = result.Outputs.Count > 0 ? result.Outputs[0] : [];
+            // Cok-cikisli node'larda her portun ciktisini de tasi (editorde dal-bazli onizleme icin).
+            var portOutputs = captureData && result.Outputs.Count > 1
+                ? result.Outputs.Select(port => (JsonNode)ToJson(port)).ToList()
+                : null;
             return (new NodeRunData(node.Id, node.Name, node.Type, NodeRunStatus.Succeeded,
-                captureData ? ToJson(primary) : new JsonArray(), null, startedAt, DateTimeOffset.UtcNow, primary.Count), result.Outputs);
+                captureData ? ToJson(primary) : new JsonArray(), null, startedAt, DateTimeOffset.UtcNow, primary.Count, portOutputs), result.Outputs);
         }
         catch (OperationCanceledException)
         {

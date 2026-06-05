@@ -95,7 +95,8 @@
                 else
                 {
                     var inputPorts = def?.InputPorts ?? (node.NodeKey.Contains("trigger") ? Array.Empty<NodePort>() : [NodePort.Main]);
-                    var outputPorts = def?.OutputPorts ?? new[] { NodePort.Main };
+                    // Cikis portlari instance parametrelerine gore degisebilir (IHasDynamicOutputs).
+                    var outputPorts = NodeCatalog.ResolveOutputs(node.NodeKey, node.Parameters);
                     var mainIns = inputPorts.Select((p, idx) => (Port: p, Idx: idx)).Where(x => x.Port.Type == NodePortType.Main).ToList();
                     var subIns = inputPorts.Select((p, idx) => (Port: p, Idx: idx)).Where(x => x.Port.Type != NodePortType.Main).ToList();
                     var mainOuts = outputPorts.Select((p, idx) => (Port: p, Idx: idx)).Where(x => x.Port.Type == NodePortType.Main).ToList();
@@ -176,7 +177,7 @@
                                  style="top:@(PortTop(k, mainOuts.Count))px">
                                 @if (mainOuts.Count > 1)
                                 {
-                                    <span class="nwf-port-label">@OutputPortLabel(node, mainOuts[k].Port)</span>
+                                    <span class="nwf-port-label">@mainOuts[k].Port.Label</span>
                                 }
                             </div>
                         }
@@ -461,6 +462,13 @@
                                     var prev = PreviewExpression(openNode, GetParam(openNode, p.Key));
                                     <textarea class="textarea expr-@prev.State" value="@GetParam(openNode, p.Key)"
                                               @oninput="e => SetParam(openNode, p.Key, e.Value?.ToString())" disabled="@IsReadOnly"></textarea>
+                                    @if (p.Type == NodeParameterType.Json && !IsReadOnly)
+                                    {
+                                        <button class="btn btn-ghost btn-sm" title="JSON'u düzenle (beautify)"
+                                                @onclick="() => SetParam(openNode, p.Key, FlowSharp.Web.Services.JsonText.Beautify(GetParam(openNode, p.Key)))">
+                                            { } Düzenle
+                                        </button>
+                                    }
                                     @if (prev.State == "valid")
                                     {
                                         <div class="expr-hint expr-ok">= @prev.Message</div>
@@ -497,6 +505,20 @@
                                             <option value="@opt">@opt</option>
                                         }
                                     </select>
+                                }
+                                else if (p.Type == NodeParameterType.MultiSelect && p.Options is not null)
+                                {
+                                    var sel = MultiSelectValues(GetParam(openNode, p.Key));
+                                    <div class="nwf-multiselect" style="display:flex; flex-direction:column; gap:4px">
+                                        @foreach (var opt in p.Options)
+                                        {
+                                            <label style="display:flex; gap:6px; align-items:center; font-weight:400">
+                                                <input type="checkbox" checked="@sel.Contains(opt)" disabled="@IsReadOnly"
+                                                       @onchange="e => ToggleMultiSelect(openNode, p.Key, p.Options, opt, (bool)(e.Value ?? false))" />
+                                                <span>@opt</span>
+                                            </label>
+                                        }
+                                    </div>
                                 }
                                 else if (p.DynamicOptions)
                                 {

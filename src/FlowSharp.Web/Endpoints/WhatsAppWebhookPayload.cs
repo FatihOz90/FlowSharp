@@ -65,9 +65,11 @@ public static class WhatsAppWebhookPayload
     /// <summary>
     /// Olusturulmus webhook payload'ina gore bu olayin workflow'u tetikleyip tetiklemeyecegini belirler.
     /// Yalniz WhatsApp olaylarina (source=whatsapp) uygulanir; diger webhook'lar her zaman tetikler.
-    /// <paramref name="eventFilter"/>: messages | statuses | all (varsayilan: messages).
+    /// <paramref name="selectedEvents"/>: trigger'da secili event'lerin CSV'si (orn. "messages,statuses").
+    /// Payload yalniz secili event turlerinden en az birini iceriyorsa tetikler; boylece secilmeyen
+    /// (orn. yalniz statuses) olaylar bos yere workflow'u (ve AI'i) calistirmaz.
     /// </summary>
-    public static bool ShouldTrigger(JsonElement payload, string? eventFilter)
+    public static bool ShouldTrigger(JsonElement payload, string? selectedEvents)
     {
         // WhatsApp olayi degilse (generic webhook) her zaman calistir.
         if (!payload.TryGetProperty("source", out var source) || source.GetString() != "whatsapp")
@@ -75,15 +77,18 @@ public static class WhatsAppWebhookPayload
             return true;
         }
 
-        var hasMessages = CountArray(payload, "messages") > 0;
-        var hasStatuses = CountArray(payload, "statuses") > 0;
+        var selected = (selectedEvents ?? string.Empty)
+            .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
 
-        return (eventFilter?.ToLowerInvariant()) switch
+        // Hicbir event secili degilse varsayilan: yalniz mesajlar.
+        if (selected.Count == 0)
         {
-            "all" => true,
-            "statuses" => hasStatuses,
-            _ => hasMessages // "messages" ve varsayilan: yalniz gelen mesaj varsa tetikle.
-        };
+            selected.Add("messages");
+        }
+
+        return (selected.Contains("messages") && CountArray(payload, "messages") > 0)
+            || (selected.Contains("statuses") && CountArray(payload, "statuses") > 0);
     }
 
     private static int CountArray(JsonElement payload, string property) =>

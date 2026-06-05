@@ -178,90 +178,63 @@ public class DataNodeTests
         items.Should().HaveCount(2);
     }
 
-    // ---- Switch ----
+    // ---- Switch (pozisyon-bazli dinamik cikislar) ----
     [Fact]
-    public async Task Switch_routes_by_matching_rule()
+    public async Task Switch_routes_each_rule_to_its_own_port_in_order()
     {
         var node = new SwitchNode();
         var ctx = Ctx(new JsonObject
         {
             ["value1"] = "{{ $json.type }}",
             ["rules"] = new JsonArray(
-                new JsonObject { ["value"] = "a", ["output"] = 0 },
-                new JsonObject { ["value"] = "b", ["output"] = 2 })
+                new JsonObject { ["value"] = "a" },
+                new JsonObject { ["value"] = "b" })
         },
             new JsonObject { ["type"] = "b" });
 
         var outputs = (await node.ExecuteAsync(ctx)).Outputs;
+        // 2 kural portu (0=a, 1=b) + 1 fallback (2). "b" -> port 1.
+        outputs.Should().HaveCount(3);
         outputs[0].Should().BeEmpty();
-        outputs[2].Should().HaveCount(1);
+        outputs[1].Should().HaveCount(1);
+        outputs[2].Should().BeEmpty();
     }
 
     [Fact]
-    public async Task Switch_routes_unmatched_items_to_fallback_output()
+    public async Task Switch_routes_unmatched_items_to_fallback()
     {
         var node = new SwitchNode();
         var ctx = Ctx(new JsonObject
         {
             ["value1"] = "{{ $json.type }}",
-            ["rules"] = new JsonArray(new JsonObject { ["value"] = "a", ["output"] = 0 })
+            ["rules"] = new JsonArray(new JsonObject { ["value"] = "a" })
         },
             new JsonObject { ["type"] = "zzz" });
 
         var outputs = (await node.ExecuteAsync(ctx)).Outputs;
-        // 4 kural portu + 1 fallback; eslesmeyen item sessizce dusurulmez, fallback'e gider.
-        outputs.Should().HaveCount(5);
+        // 1 kural portu + fallback (son). Eslesmeyen -> fallback.
+        outputs.Should().HaveCount(2);
         outputs[0].Should().BeEmpty();
-        outputs[4].Should().HaveCount(1);
+        outputs[1].Should().HaveCount(1);
     }
 
     [Fact]
-    public async Task Switch_fails_on_matched_rule_with_invalid_output()
+    public void Switch_outputs_one_port_per_rule_plus_fallback_with_labels()
     {
         var node = new SwitchNode();
-        var ctx = Ctx(new JsonObject
+        var ports = node.GetOutputs(new Dictionary<string, string>
         {
-            ["value1"] = "{{ $json.type }}",
-            ["rules"] = new JsonArray(new JsonObject { ["value"] = "b", ["output"] = "abc" })
-        },
-            new JsonObject { ["type"] = "b" });
+            ["rules"] = "[{\"value\":\"sent\",\"label\":\"Gönderildi\"},{\"value\":\"read\"}]"
+        });
 
-        var result = await node.ExecuteAsync(ctx);
-        result.Succeeded.Should().BeFalse();
-        result.Error.Should().Contain("output");
+        ports.Select(p => p.Label).Should().Equal("Gönderildi", "read", "Fallback (eslesmeyen)");
     }
 
     [Fact]
-    public async Task Switch_fails_on_matched_rule_with_out_of_range_output()
+    public void Switch_with_no_rules_has_only_fallback()
     {
         var node = new SwitchNode();
-        var ctx = Ctx(new JsonObject
-        {
-            ["value1"] = "{{ $json.type }}",
-            ["rules"] = new JsonArray(new JsonObject { ["value"] = "b", ["output"] = 7 })
-        },
-            new JsonObject { ["type"] = "b" });
-
-        var result = await node.ExecuteAsync(ctx);
-        result.Succeeded.Should().BeFalse();
-    }
-
-    [Fact]
-    public async Task Switch_accepts_output_given_as_string()
-    {
-        // "output" string olarak verilse de ("2") dogru porta yonlendirilmeli (eskiden 0'a duserdi).
-        var node = new SwitchNode();
-        var ctx = Ctx(new JsonObject
-        {
-            ["value1"] = "{{ $json.type }}",
-            ["rules"] = new JsonArray(
-                new JsonObject { ["value"] = "a", ["output"] = "0" },
-                new JsonObject { ["value"] = "b", ["output"] = "2" })
-        },
-            new JsonObject { ["type"] = "b" });
-
-        var outputs = (await node.ExecuteAsync(ctx)).Outputs;
-        outputs[0].Should().BeEmpty();
-        outputs[2].Should().HaveCount(1);
+        var ports = node.GetOutputs(new Dictionary<string, string> { ["rules"] = "[]" });
+        ports.Should().ContainSingle().Which.Name.Should().Be("fallback");
     }
 }
