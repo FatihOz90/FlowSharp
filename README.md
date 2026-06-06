@@ -1,19 +1,21 @@
 # FlowSharp
 
-![FlowSharp workflow automation hero](docs/assets/flowsharp-hero.png)
+*Read this in [Türkçe](README.tr.md).*
 
-FlowSharp is a node-based workflow automation platform built with **C#**, **.NET 10**, and **Blazor**. It includes a visual workflow designer, executable automation nodes, AI agent support, webhook and schedule triggers, background workers, and runtime-loadable C# plugins.
+![FlowSharp workflow automation hero](docs/public/assets/flowsharp-hero.png)
 
-![FlowSharp workflow designer](docs/assets/flowsharp-designer-mockup.png)
+FlowSharp is a node-based workflow automation platform built with **C#**, **.NET 10**, and **Blazor**. It includes a visual workflow designer, executable automation nodes, AI agents with RAG, webhook and schedule triggers, background workers, and runtime-loadable C# plugins.
+
+![FlowSharp workflow designer](docs/public/assets/flowsharp-designer-mockup.png)
 
 ## Highlights
 
-- Visual workflow designer with node palette, connections, parameters, and run status.
-- Executable nodes for HTTP, email, PostgreSQL, logic, data transforms, JavaScript, communication services, and AI.
-- AI agents powered by Semantic Kernel with model and tool sub-nodes.
-- Webhook, manual, schedule, chat, IMAP, workflow, and error triggers.
-- Runtime plugin system: drop C# source files into `plugins/` and load new nodes without rebuilding the app.
-- ASP.NET Core Identity, role/permission policies, encrypted credentials, SignalR live events, and Serilog logs.
+- Visual workflow designer with node palette, connections, parameters, and live run status.
+- Executable nodes for HTTP, databases (PostgreSQL, SQL Server, MySQL, SQLite), email and messaging (Slack, Discord, Telegram, WhatsApp), logic, data transforms, and sandboxed JavaScript.
+- AI agents powered by Semantic Kernel with model, tool (incl. MCP), and memory sub-nodes, plus a local-embedding vector store for RAG. Providers include OpenAI, Azure OpenAI, Anthropic, Gemini, Groq, Mistral, Cohere, Ollama, and more.
+- Manual, schedule (cron), webhook, IMAP, chat, WhatsApp, workflow, and error triggers — with synchronous webhook responses.
+- Runtime plugin system: drop C# source files into `plugins/` and load new nodes (compiled with Roslyn) without rebuilding the app.
+- ASP.NET Core Identity, role/permission policies, AES-GCM encrypted credentials, owner-scoped data isolation, SignalR live events, Serilog logs, and optional OpenTelemetry.
 
 
 ## Quick Start
@@ -53,27 +55,21 @@ dotnet restore
 dotnet build
 ```
 
-Run Web:
+Run the Web app:
 
 ```powershell
 dotnet run --project src/FlowSharp.Web
 ```
 
-Run Worker in another terminal:
+That's all you need for development: by default `Worker:RunInWebProcess` is `true`, so the queue worker, scheduler, and trigger services run inside the web process. The SQLite schema is created automatically on startup — there is no separate migration step.
+
+To run the worker as its own scalable process (production-like), set `Worker:RunInWebProcess` to `false` and start it in another terminal:
 
 ```powershell
 dotnet run --project src/FlowSharp.Worker
 ```
 
-For single-process development, set:
-
-```json
-{
-  "Worker": {
-    "RunInWebProcess": true
-  }
-}
-```
+When Web and Worker run separately they must share the same database, `Security:CredentialEncryptionKey`, and (ideally) a Redis instance. See [Deployment](docs/guide/deployment.md).
 
 ## Database & Migrations
 
@@ -141,16 +137,29 @@ the browser. Coverage output (`TestResults/`, `CoverageReport/`) is git-ignored.
 
 ## Documentation
 
+**Introduction**
 - [Getting Started](docs/guide/getting-started.md)
 - [Architecture](docs/guide/architecture.md)
 - [Configuration](docs/guide/configuration.md)
-- [Roles And Permissions](docs/guide/roles-and-permissions.md)
+- [Database & Migrations](docs/guide/database-migrations.md)
+- [Deployment](docs/guide/deployment.md)
+
+**Building Workflows**
 - [Built-in Nodes](docs/guide/built-in-nodes.md)
-- [AI Agents](docs/guide/ai-agents.md)
+- [Triggers & Scheduling](docs/guide/triggers-and-scheduling.md)
+- [Expressions](docs/guide/expressions.md)
+- [Credentials](docs/guide/credentials.md)
 - [Webhooks](docs/guide/webhooks.md)
+- [AI Agents & RAG](docs/guide/ai-agents.md)
+- [Executions & Data](docs/guide/executions-and-data.md)
+
+**Plugin System**
 - [Plugin Development](docs/guide/plugin-development.md)
 - [Marketplace](docs/guide/marketplace.md)
-- [Database & Migrations](docs/guide/database-migrations.md)
+
+**Operations**
+- [Roles & Permissions](docs/guide/roles-and-permissions.md)
+- [Observability](docs/guide/observability.md)
 
 ## Project Structure
 

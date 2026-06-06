@@ -1,6 +1,6 @@
 # Database & Migrations
 
-FlowSharp persists its data through **Entity Framework Core** and supports three relational database providers without any code changes. The active provider is selected entirely through configuration, and the corresponding schema is created and upgraded automatically at application startup.
+FlowSharp persists its data through **Entity Framework Core** and supports three relational database providers without any code changes. The active provider is selected entirely through configuration, and the corresponding schema is created and upgraded automatically at application startup. The default provider is **SQLite**, so a fresh checkout runs with no database server.
 
 ## Supported providers
 

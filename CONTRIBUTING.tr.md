@@ -17,7 +17,7 @@ Eğer **Core (Çekirdek) kod tabanında** bir değişiklik yapmayı planlıyorsa
     *   `src/FlowSharp.Application`
     *   `src/FlowSharp.Infrastructure`
 *   **Neler Core kapsamına girmez?**
-    *   `plugins/` klasörü altına yeni topluluk düğümleri (nodes) eklemek.
+    *   Topluluk düğümleri/eklentileri — bunlar bu çekirdek depoya değil, ayrı [FlowSharp Plugins](https://github.com/FlowSharp/plugins) deposuna gider (aşağıya bakın). `src/FlowSharp.Nodes` yerleşik node kütüphanesidir ve **core kapsamındadır**.
     *   Yazım hatalarını düzeltmek, net bir şekilde yeniden üretilebilen (reproduce) bug'ları fix'lemek veya dokümantasyonu güncellemek.
 
 > [!IMPORTANT]
@@ -41,6 +41,6 @@ Yeni düğümler (workflow nodes) ekleyerek FlowSharp'ı zenginleştirmek istiyo
 
 ## 📝 Kod Düzeni ve Kılavuzlar
 
-*   C# 12 / .NET 10 özelliklerini kullanın.
+*   .NET 10 hedefleyin ve modern C# özelliklerini kullanın (kod tabanı halihazırda primary constructor, collection expression vb. kullanıyor).
 *   Kodunuzu varsayılan editör yapılandırmasına göre formatlayın.
 *   Mümkünse birim testleri (unit tests) ekleyin.

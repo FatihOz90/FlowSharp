@@ -17,7 +17,7 @@ If you are planning to make any changes to the **Core codebase**, you **MUST** o
     *   `src/FlowSharp.Application`
     *   `src/FlowSharp.Infrastructure`
 *   **What is NOT Core?**
-    *   Adding new community/plugin nodes under `plugins/` or `src/FlowSharp.Nodes`.
+    *   Community nodes/plugins — these belong in the dedicated [FlowSharp Plugins](https://github.com/FlowSharp/plugins) repository, not this core repo (see below). `src/FlowSharp.Nodes` is the built-in node library and **is** core.
     *   Fixing typos, bugs that have a clear reproduction case, or updating documentation.
 
 > [!IMPORTANT]
@@ -41,6 +41,6 @@ If you want to contribute new workflow nodes or plugins, please send your Pull R
 
 ## 📝 Code Style & Guidelines
 
-*   Use C# 12 / .NET 10 features.
+*   Target .NET 10 and use modern C# features (the codebase already uses primary constructors, collection expressions, etc.).
 *   Format your code using the default editor config.
 *   Write unit tests where applicable.

@@ -252,10 +252,10 @@ Recommendations:
 Webhook workflows are exposed at:
 
 ```text
-/webhook/{path}
+/webhook/{workflowKey}/{path}
 ```
 
-FlowSharp matches requests by the webhook node's method and path. Runtime exceptions are logged server-side and callers receive a generic error message.
+FlowSharp matches requests by workflow key, HTTP method, and path. The per-workflow `workflowKey` isolates endpoints so two workflows can reuse the same `path` without colliding. Runtime exceptions are logged server-side and callers receive a generic error message.
 
 Recommendations:
 
@@ -266,7 +266,7 @@ Recommendations:
 
 ### `ConnectionStrings:DefaultConnection`
 
-PostgreSQL stores users, workflows, queued jobs, encrypted credentials, webhook registrations, and execution records.
+The application database (SQLite by default, or PostgreSQL / SQL Server) stores users, workflows, queued jobs, encrypted credentials, webhook registrations, and execution records.
 
 Recommendations:
 

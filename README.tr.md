@@ -1,19 +1,21 @@
 # FlowSharp
 
-![FlowSharp workflow automation hero](docs/assets/flowsharp-hero.png)
+*Bu belgeyi [English](README.md) dilinde okuyun.*
 
-FlowSharp, **C#**, **.NET 10** ve **Blazor** ile geliştirilen node tabanlı bir workflow otomasyon platformudur. Görsel workflow tasarımcısı, çalıştırılabilir otomasyon node'ları, AI ajan desteği, webhook ve zamanlanmış tetikleyiciler, arka plan worker'ları ve çalışma zamanında yüklenebilen C# plugin sistemi içerir.
+![FlowSharp workflow automation hero](docs/public/assets/flowsharp-hero.png)
 
-![FlowSharp workflow designer](docs/assets/flowsharp-designer-mockup.png)
+FlowSharp, **C#**, **.NET 10** ve **Blazor** ile geliştirilen node tabanlı bir workflow otomasyon platformudur. Görsel workflow tasarımcısı, çalıştırılabilir otomasyon node'ları, RAG destekli AI ajanları, webhook ve zamanlanmış tetikleyiciler, arka plan worker'ları ve çalışma zamanında yüklenebilen C# plugin sistemi içerir.
+
+![FlowSharp workflow designer](docs/public/assets/flowsharp-designer-mockup.png)
 
 ## Öne Çıkanlar
 
-- Node paleti, bağlantılar, parametreler ve çalışma durumları olan görsel workflow tasarımcısı.
-- HTTP, e-posta, PostgreSQL, mantık, veri dönüşümü, JavaScript, iletişim servisleri ve AI için çalıştırılabilir node'lar.
-- Semantic Kernel tabanlı, model ve araç alt-node'ları destekleyen AI ajanları.
-- Webhook, manuel, zamanlanmış, chat, IMAP, workflow ve hata tetikleyicileri.
-- Runtime plugin sistemi: C# kaynak dosyalarını `plugins/` klasörüne bırakıp uygulamayı yeniden derlemeden yeni node yükleme.
-- ASP.NET Core Identity, rol/permission policy altyapısı, şifreli credential saklama, SignalR canlı olaylar ve Serilog logları.
+- Node paleti, bağlantılar, parametreler ve canlı çalışma durumları olan görsel workflow tasarımcısı.
+- HTTP, veritabanları (PostgreSQL, SQL Server, MySQL, SQLite), e-posta ve mesajlaşma (Slack, Discord, Telegram, WhatsApp), mantık, veri dönüşümü ve sandbox'lı JavaScript için çalıştırılabilir node'lar.
+- Semantic Kernel tabanlı, model, araç (MCP dahil) ve hafıza alt-node'ları destekleyen AI ajanları; RAG için yerel-embedding'li vektör deposu. Sağlayıcılar: OpenAI, Azure OpenAI, Anthropic, Gemini, Groq, Mistral, Cohere, Ollama ve dahası.
+- Manuel, zamanlanmış (cron), webhook, IMAP, chat, WhatsApp, workflow ve hata tetikleyicileri — senkron webhook yanıtlarıyla.
+- Runtime plugin sistemi: C# kaynak dosyalarını `plugins/` klasörüne bırakıp uygulamayı yeniden derlemeden yeni node yükleme (Roslyn ile derlenir).
+- ASP.NET Core Identity, rol/permission policy altyapısı, AES-GCM ile şifreli credential saklama, sahip-bazlı veri izolasyonu, SignalR canlı olaylar, Serilog logları ve opsiyonel OpenTelemetry.
 
 ## Hızlı Başlangıç
 
@@ -58,21 +60,15 @@ Web uygulamasını çalıştırma:
 dotnet run --project src/FlowSharp.Web
 ```
 
-Worker'ı ayrı terminalde çalıştırma:
+Geliştirme için bu kadarı yeterli: varsayılan olarak `Worker:RunInWebProcess` `true`'dur, yani kuyruk worker'ı, scheduler ve tetikleyici servisleri web process'i içinde çalışır. SQLite şeması açılışta otomatik oluşturulur — ayrı bir migration adımı yoktur.
+
+Worker'ı kendi ölçeklenebilir process'i olarak (üretim benzeri) çalıştırmak için `Worker:RunInWebProcess` değerini `false` yapıp ayrı bir terminalde başlatın:
 
 ```powershell
 dotnet run --project src/FlowSharp.Worker
 ```
 
-Tek process geliştirme modu için:
-
-```json
-{
-  "Worker": {
-    "RunInWebProcess": true
-  }
-}
-```
+Web ve Worker ayrı çalıştığında aynı veritabanını, aynı `Security:CredentialEncryptionKey`'i ve (tercihen) ortak bir Redis instance'ını paylaşmalıdır. Bkz. [Deployment](docs/guide/deployment.md).
 
 
 ## Veritabanı ve Migration'lar
@@ -121,16 +117,31 @@ Veri modeli değiştiğinde (yeni veya değiştirilmiş bir entity), setlerin se
 
 ## Dokümantasyon
 
+Dokümantasyon (İngilizce):
+
+**Introduction**
 - [Getting Started](docs/guide/getting-started.md)
 - [Architecture](docs/guide/architecture.md)
 - [Configuration](docs/guide/configuration.md)
-- [Roles And Permissions](docs/guide/roles-and-permissions.md)
+- [Database & Migrations](docs/guide/database-migrations.md)
+- [Deployment](docs/guide/deployment.md)
+
+**Building Workflows**
 - [Built-in Nodes](docs/guide/built-in-nodes.md)
-- [AI Agents](docs/guide/ai-agents.md)
+- [Triggers & Scheduling](docs/guide/triggers-and-scheduling.md)
+- [Expressions](docs/guide/expressions.md)
+- [Credentials](docs/guide/credentials.md)
 - [Webhooks](docs/guide/webhooks.md)
+- [AI Agents & RAG](docs/guide/ai-agents.md)
+- [Executions & Data](docs/guide/executions-and-data.md)
+
+**Plugin System**
 - [Plugin Development](docs/guide/plugin-development.md)
 - [Marketplace](docs/guide/marketplace.md)
-- [Database & Migrations](docs/guide/database-migrations.md)
+
+**Operations**
+- [Roles & Permissions](docs/guide/roles-and-permissions.md)
+- [Observability](docs/guide/observability.md)
 
 ## Proje Yapısı
 

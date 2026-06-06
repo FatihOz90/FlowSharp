@@ -37,7 +37,7 @@ Workflows and credentials carry an owner. Non-administrators see and manage **on
 - Credentials are resolved at execution time only when the credential owner matches the workflow owner, preventing cross-tenant secret access.
 - `Admin` is exempt from ownership filtering and can see all records (the Workflows and Credentials pages show an admin's own records and other users' records in separate sections).
 
-This makes self-registration safe in multi-user deployments: each user operates within an isolated workspace.
+This makes self-registration safe in multi-user deployments: each user operates within an isolated workspace. See [Credentials](credentials.md#ownership-and-isolation) for how secrets are scoped and resolved.
 
 ## Where Permissions Are Defined
 
