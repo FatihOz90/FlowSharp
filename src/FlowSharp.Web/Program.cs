@@ -10,6 +10,7 @@ using FlowSharp.Web.Components;
 using FlowSharp.Web.Components.Account;
 using FlowSharp.Web.Endpoints;
 using FlowSharp.Web.Localization;
+using FlowSharp.Web.Logging;
 using Microsoft.AspNetCore.Localization;
 using Serilog;
 using MudBlazor.Services;
@@ -23,8 +24,10 @@ builder.Host.UseSerilog((context, services, configuration) => configuration
     .ReadFrom.Configuration(context.Configuration)
     .ReadFrom.Services(services)
     .Enrich.FromLogContext()
-    .WriteTo.Console()
-    .WriteTo.File("logs/web-.log", rollingInterval: RollingInterval.Day));
+    // Tum sink'ler merkezi temizlemeden gecer: log forging onlenir, e-postalar maskelenir.
+    .WriteTo.Scrubbed(write => write
+        .Console()
+        .WriteTo.File("logs/web-.log", rollingInterval: RollingInterval.Day)));
 
 // Add services to the container.
 builder.Services.AddRazorComponents()
