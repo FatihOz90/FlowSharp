@@ -16,4 +16,19 @@
     <RuntimeIdentifier>win-x64</RuntimeIdentifier>
     <AppendRuntimeIdentifierToOutputPath>false</AppendRuntimeIdentifierToOutputPath>
   </PropertyGroup>
+
+  <!-- Static analysis: built-in .NET analyzers (incl. CA security rules) for all projects. -->
+  <PropertyGroup>
+    <EnableNETAnalyzers>true</EnableNETAnalyzers>
+    <AnalysisLevel>latest</AnalysisLevel>
+  </PropertyGroup>
+
+  <!-- SecurityCodeScan: dedicated SAST Roslyn analyzer (SQLi/XSS/crypto/path traversal, ...).
+       Analyzer-only reference; not shipped as a runtime/transitive dependency. -->
+  <ItemGroup>
+    <PackageReference Include="SecurityCodeScan.VS2019" Version="5.6.7">
+      <PrivateAssets>all</PrivateAssets>
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers</IncludeAssets>
+    </PackageReference>
+  </ItemGroup>
 </Project>

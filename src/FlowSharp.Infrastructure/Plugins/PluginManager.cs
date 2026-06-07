@@ -153,9 +153,22 @@ public sealed class PluginManager(
                 }
 
                 var relative = entry.FullName[innerPrefix.Length..];
-                var destPath = Path.Combine(targetDir, relative.Replace('/', Path.DirectorySeparatorChar));
+                var destPath = Path.GetFullPath(Path.Combine(targetDir, relative.Replace('/', Path.DirectorySeparatorChar)));
+
+                // Zip Slip korumasi (CWE-22): kotu niyetli bir repo, girdi adinda '..' kullanarak
+                // hedef klasor disina dosya yazmaya calisabilir. Cozumlenen yol targetDir disindaysa atla.
+                var targetPrefix = Path.GetFullPath(targetDir) + Path.DirectorySeparatorChar;
+                if (!destPath.StartsWith(targetPrefix, StringComparison.Ordinal))
+                {
+                    continue;
+                }
+
                 Directory.CreateDirectory(Path.GetDirectoryName(destPath)!);
+                // SCS0018: destPath yukarida targetDir sinirina karsi dogrulandi (Zip Slip korumasi);
+                // analizci StartsWith bariyerini taniyamadigi icin uyari burada bastiriliyor.
+#pragma warning disable SCS0018 // Path traversal
                 entry.ExtractToFile(destPath, overwrite: true);
+#pragma warning restore SCS0018
             }
         }
 

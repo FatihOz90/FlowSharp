@@ -19,11 +19,12 @@ public static class ScrubbingSinkExtensions
         this LoggerSinkConfiguration loggerSinkConfiguration,
         Action<LoggerSinkConfiguration> configureWrappedSinks,
         LogEventLevel restrictedToMinimumLevel = LevelAlias.Minimum,
-        LoggingLevelSwitch? levelSwitch = null) =>
-        LoggerSinkConfiguration.Wrap(
-            loggerSinkConfiguration,
+        LoggingLevelSwitch? levelSwitch = null)
+    {
+        var wrapper = LoggerSinkConfiguration.Wrap(
             inner => new ScrubbingSink(inner),
-            configureWrappedSinks,
-            restrictedToMinimumLevel,
-            levelSwitch);
+            configureWrappedSinks);
+
+        return loggerSinkConfiguration.Sink(wrapper, restrictedToMinimumLevel, levelSwitch);
+    }
 }

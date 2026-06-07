@@ -1,0 +1,23 @@
+# OSV-Scanner: dependency vulnerability scan (Google OSV database).
+# Results are uploaded as SARIF to the repository Security tab.
+name: OSV-Scanner
+
+on:
+  push:
+    branches: ["main"]
+  pull_request:
+    branches: ["main"]
+  schedule:
+    - cron: "27 6 * * 1" # weekly, Monday 06:27 UTC
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  scan:
+    uses: "google/osv-scanner-action/.github/workflows/osv-scanner-reusable.yml@v2.2.3"
+    permissions:
+      contents: read
+      security-events: write
+      actions: read

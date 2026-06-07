@@ -135,7 +135,15 @@ app.MapGet("/set-culture", (string culture, string? redirectUri, HttpContext ctx
     ctx.Response.Cookies.Append(
         CookieRequestCultureProvider.DefaultCookieName,
         CookieRequestCultureProvider.MakeCookieValue(new RequestCulture(culture)),
-        new CookieOptions { Expires = DateTimeOffset.UtcNow.AddYears(1), IsEssential = true });
+        new CookieOptions
+        {
+            Expires = DateTimeOffset.UtcNow.AddYears(1),
+            IsEssential = true,
+            HttpOnly = true,
+            // Prod'da (HTTPS) Secure isaretle; lokal HTTP gelistirmeyi bozmasin diye istege gore.
+            Secure = ctx.Request.IsHttps,
+            SameSite = SameSiteMode.Lax
+        });
     return Results.LocalRedirect(string.IsNullOrWhiteSpace(redirectUri) ? "/" : redirectUri);
 });
 
